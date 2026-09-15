@@ -459,15 +459,15 @@ function MapView() {
 
       const marker = leafletLib.marker([area.lat, area.lng], { icon }).addTo(group);
       marker.bindPopup(`
-        <div style="font-family: Inter, sans-serif; min-width: 200px;">
-          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
-            <strong style="font-size: 14px; color: #1e293b;">${area.name}</strong>
-            <span style="background: ${color}25; color: ${color}; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: bold;">${area.priority}</span>
+        <div style="font-family: Inter, sans-serif; min-width: 200px; background: #1e293b; padding: 12px; border-radius: 8px; border: 2px solid ${color};">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+            <strong style="font-size: 14px; color: #ffffff;">${area.name}</strong>
+            <span style="background: ${color}40; color: #ffffff; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: bold; border: 1px solid ${color};">${area.priority}</span>
           </div>
-          <div style="color: #64748b; font-size: 12px; line-height: 1.5;">
-            <div><strong>Risk Level:</strong> <span style="color: ${color}; font-weight: bold;">${area.riskPercent}%</span></div>
-            <div><strong>${distLabel}:</strong> ${area.distanceFromUserKm || 'N/A'} km</div>
-            <div><strong>Population:</strong> ${area.population ? area.population.toLocaleString() : 'N/A'}</div>
+          <div style="color: #e2e8f0; font-size: 12px; line-height: 1.8;">
+            <div style="margin-bottom: 4px;"><strong style="color: #ffffff;">Risk Level:</strong> <span style="color: ${color}; font-weight: bold; font-size: 14px;">${area.riskPercent}%</span></div>
+            <div style="margin-bottom: 4px;"><strong style="color: #ffffff;">${distLabel}:</strong> <span style="color: #22d3ee;">${area.distanceFromUserKm || 'N/A'} km</span></div>
+            <div><strong style="color: #ffffff;">Population:</strong> <span style="color: #fbbf24;">${area.population ? area.population.toLocaleString() : 'N/A'}</span></div>
           </div>
         </div>
       `);
@@ -547,19 +547,19 @@ function MapView() {
 
       const marker = leafletLib.marker([disaster.lat, disaster.lng], { icon }).addTo(group);
       marker.bindPopup(`
-        <div style="font-family: Inter, sans-serif; min-width: 220px;">
-          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
-            <span style="font-size: 20px;">${emoji}</span>
+        <div style="font-family: Inter, sans-serif; min-width: 220px; background: #1e293b; padding: 12px; border-radius: 8px; border: 2px solid #ef4444;">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+            <span style="font-size: 24px;">${emoji}</span>
             <div>
-              <strong style="font-size: 14px; color: #dc2626; text-transform: uppercase;">${disaster.type} ALARM</strong>
-              <div style="font-size: 11px; color: #64748b;">${disaster.areaName}</div>
+              <strong style="font-size: 15px; color: #ef4444; text-transform: uppercase; display: block;">${disaster.type} ALARM</strong>
+              <div style="font-size: 11px; color: #94a3b8;">${disaster.areaName}</div>
             </div>
           </div>
-          <p style="font-size: 12px; color: #334155; margin: 4px 0 6px;">${disaster.description}</p>
-          <div style="background: #f8fafc; padding: 6px; border-radius: 6px; font-size: 11px; color: #475569;">
-            <div><strong>Status:</strong> <span style="color:${severityColor}; font-weight: bold; text-transform: uppercase;">${disaster.status}</span></div>
-            <div><strong>Severity:</strong> <span style="color:${severityColor}; font-weight: bold; text-transform: capitalize;">${disaster.severity}</span></div>
-            <div><strong>Risk Rating:</strong> <strong>${disaster.riskPercent}%</strong></div>
+          <p style="font-size: 12px; color: #e2e8f0; margin: 4px 0 8px;">${disaster.description}</p>
+          <div style="background: #0f172a; padding: 8px; border-radius: 6px; font-size: 12px; color: #e2e8f0; line-height: 1.8;">
+            <div style="margin-bottom: 4px;"><strong style="color: #ffffff;">Status:</strong> <span style="color:${severityColor}; font-weight: bold; text-transform: uppercase;">${disaster.status}</span></div>
+            <div style="margin-bottom: 4px;"><strong style="color: #ffffff;">Severity:</strong> <span style="color:${severityColor}; font-weight: bold; text-transform: capitalize; font-size: 13px;">${disaster.severity}</span></div>
+            <div style="margin-bottom: 4px;"><strong style="color: #ffffff;">Risk Rating:</strong> <span style="color: #fbbf24; font-weight: bold;">${disaster.riskPercent}%</span></div>
             ${teamLine}
           </div>
         </div>
@@ -619,17 +619,17 @@ function MapView() {
 
       const marker = leafletLib.marker([lat, lng], { icon }).addTo(group);
       marker.bindPopup(`
-        <div style="font-family: Inter, sans-serif; min-width: 200px;">
-          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
-            <span style="font-size: 18px;">🚁</span>
+        <div style="font-family: Inter, sans-serif; min-width: 200px; background: #1e293b; padding: 12px; border-radius: 8px; border: 2px solid #8b5cf6;">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+            <span style="font-size: 20px;">🚁</span>
             <div>
-              <strong style="font-size: 13px; color: #7e22ce;">${team.name}</strong>
-              <div style="font-size: 10px; color: #64748b;">${team.members} Officers Deployed</div>
+              <strong style="font-size: 14px; color: #8b5cf6; display: block;">${team.name}</strong>
+              <div style="font-size: 11px; color: #94a3b8;">${team.members} Officers Deployed</div>
             </div>
           </div>
-          <div style="font-size: 12px; color: #334155;">
-            <div><strong>Assigned Sector:</strong> ${team.location || team.assignedArea}</div>
-            <div><strong>Operation:</strong> ${team.mission}</div>
+          <div style="font-size: 12px; color: #e2e8f0; line-height: 1.8;">
+            <div style="margin-bottom: 4px;"><strong style="color: #ffffff;">Assigned Sector:</strong> <span style="color: #22d3ee;">${team.location || team.assignedArea}</span></div>
+            <div><strong style="color: #ffffff;">Operation:</strong> <span style="color: #fbbf24;">${team.mission}</span></div>
           </div>
         </div>
       `);
@@ -677,13 +677,13 @@ function MapView() {
 
       const marker = leafletLib.marker([hosp.lat, hosp.lng], { icon }).addTo(group);
       marker.bindPopup(`
-        <div style="font-family: Inter, sans-serif; min-width: 210px;">
-          <strong style="font-size: 13px; color: #065f46;">🏥 ${hosp.name}</strong>
-          <div style="color: #64748b; font-size: 11px; margin-top: 5px; line-height: 1.6;">
-            <div><strong>${distLabel}:</strong> <span style="color: #059669; font-weight: bold;">${hosp.distance} km</span></div>
-            <div><strong>Transit Time:</strong> <span>${hosp.transitEta || '15 mins'}</span></div>
-            <div><strong>Ambulance Units:</strong> ${hosp.ambulances} Ready</div>
-            <div><strong>Emergency Care:</strong> ${hosp.emergency ? '24/7 Trauma Service' : 'General'}</div>
+        <div style="font-family: Inter, sans-serif; min-width: 210px; background: #1e293b; padding: 12px; border-radius: 8px; border: 2px solid #10b981;">
+          <strong style="font-size: 14px; color: #ffffff; display: block; margin-bottom: 8px;">🏥 ${hosp.name}</strong>
+          <div style="color: #e2e8f0; font-size: 12px; line-height: 1.8;">
+            <div style="margin-bottom: 4px;"><strong style="color: #ffffff;">${distLabel}:</strong> <span style="color: #10b981; font-weight: bold;">${hosp.distance} km</span></div>
+            <div style="margin-bottom: 4px;"><strong style="color: #ffffff;">Transit Time:</strong> <span style="color: #22d3ee;">${hosp.transitEta || '15 mins'}</span></div>
+            <div style="margin-bottom: 4px;"><strong style="color: #ffffff;">Ambulance Units:</strong> <span style="color: #fbbf24;">${hosp.ambulances} Ready</span></div>
+            <div><strong style="color: #ffffff;">Emergency Care:</strong> <span style="color: ${hosp.emergency ? '#10b981' : '#94a3b8'};">${hosp.emergency ? '24/7 Trauma Service' : 'General'}</span></div>
           </div>
         </div>
       `);
@@ -745,14 +745,14 @@ function MapView() {
 
       const marker = leafletLib.marker([dam.latitude, dam.longitude], { icon }).addTo(group);
       marker.bindPopup(`
-        <div style="font-family: Inter, sans-serif; min-width: 220px;">
-          <strong style="font-size: 13px; color: #06b6d4;">💧 ${dam.name}</strong>
-          <div style="color: #64748b; font-size: 11px; margin-top: 5px; line-height: 1.6;">
-            <div><strong>River:</strong> ${dam.river}</div>
-            <div><strong>Current Level:</strong> <span style="color: ${color}; font-weight: bold;">${dam.currentLevel} ft</span></div>
-            <div><strong>Full Level:</strong> ${dam.fullReservoirLevel} ft</div>
-            <div><strong>Fill:</strong> <span style="color: ${color}; font-weight: bold;">${fillPct.toFixed(1)}%</span></div>
-            <div><strong>Status:</strong> ${fillPct >= 75 ? '🔴 High' : fillPct >= 50 ? '🟡 Normal' : '🔵 Low'}</div>
+        <div style="font-family: Inter, sans-serif; min-width: 220px; background: #1e293b; padding: 12px; border-radius: 8px; border: 2px solid ${color};">
+          <strong style="font-size: 14px; color: #ffffff; display: block; margin-bottom: 8px;">💧 ${dam.name}</strong>
+          <div style="color: #e2e8f0; font-size: 12px; line-height: 1.8;">
+            <div style="margin-bottom: 4px;"><strong style="color: #ffffff;">River:</strong> <span style="color: #22d3ee;">${dam.river}</span></div>
+            <div style="margin-bottom: 4px;"><strong style="color: #ffffff;">Current Level:</strong> <span style="color: ${color}; font-weight: bold;">${dam.currentLevel} ft</span></div>
+            <div style="margin-bottom: 4px;"><strong style="color: #ffffff;">Full Level:</strong> <span style="color: #94a3b8;">${dam.fullReservoirLevel} ft</span></div>
+            <div style="margin-bottom: 4px;"><strong style="color: #ffffff;">Fill:</strong> <span style="color: ${color}; font-weight: bold; font-size: 14px;">${fillPct.toFixed(1)}%</span></div>
+            <div><strong style="color: #ffffff;">Status:</strong> ${fillPct >= 75 ? '<span style="color: #ef4444;">🔴 High</span>' : fillPct >= 50 ? '<span style="color: #eab308;">🟡 Normal</span>' : '<span style="color: #06b6d4;">🔵 Low</span>'}</div>
           </div>
         </div>
       `);
