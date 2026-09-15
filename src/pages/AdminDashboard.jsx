@@ -196,9 +196,8 @@ function AdminDashboard() {
                   {step.status === 'active' && <Activity className="h-4 w-4 text-blue-400 animate-pulse" />}
                   {step.status === 'waiting' && <Clock className="h-4 w-4 text-yellow-400" />}
                 </div>
-                <h4 className="text-sm font-bold text-white mb-2">{step.name}</h4>
-                <p className="text-[10px] text-slate-400 mb-3 leading-relaxed">{step.description}</p>
-                <div className="flex items-center justify-between text-[10px]">
+                <h4 className="text-base font-bold text-white mb-3">{step.name}</h4>
+                <div className="flex items-center justify-between text-xs">
                   <span className="text-slate-500">
                     {step.sources && `${step.sources} sources`}
                     {step.processed && `${step.processed} records`}
