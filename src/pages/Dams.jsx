@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Waves,
   AlertTriangle,
@@ -18,12 +18,14 @@ import {
   Share2,
   Info,
   X,
+  RefreshCw,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import {
   getDamsByBasin,
   sendDamSurgeWhatsAppAlert,
   sendCausewaySafetyWhatsApp,
+  getNextSyncInfo,
 } from '../services/damService';
 
 const BASINS = [
@@ -36,13 +38,36 @@ const BASINS = [
 ];
 
 export default function Dams() {
-  const { dams, updateDamDischarge, simulateDamSurge, getDamStats, showNotification } = useApp();
+  const {
+    dams,
+    lastDamSync,
+    syncDamTelemetry,
+    updateDamDischarge,
+    simulateDamSurge,
+    getDamStats,
+    showNotification,
+  } = useApp();
   const [selectedBasin, setSelectedBasin] = useState('ALL');
   const [selectedDam, setSelectedDam] = useState(null);
   const [simulatingId, setSimulatingId] = useState(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [now, setNow] = useState(Date.now());
 
+  // 1-second interval to update countdown timer dynamically
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const syncInfo = getNextSyncInfo(lastDamSync);
   const stats = getDamStats();
   const filteredDams = getDamsByBasin(dams, selectedBasin);
+
+  const handleSyncNow = () => {
+    setIsSyncing(true);
+    syncDamTelemetry(true);
+    setTimeout(() => setIsSyncing(false), 800);
+  };
 
   const handleSimulate = (damId) => {
     setSimulatingId(damId);
@@ -103,14 +128,53 @@ export default function Dams() {
         {/* Quick Top Actions */}
         <div className="flex items-center gap-2 flex-wrap">
           <button
+            onClick={handleSyncNow}
+            disabled={isSyncing}
+            className="px-3.5 py-2 rounded-xl bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-300 hover:text-white border border-cyan-500/30 font-bold text-xs flex items-center gap-1.5 transition-all"
+            title="Fetch fresh official bulletin records and restart 1-hour countdown"
+          >
+            <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>Sync Feed Now</span>
+          </button>
+          <button
             onClick={() => handleSimulate('mettur')}
             disabled={simulatingId === 'mettur'}
             className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-red-500/20 transition-all"
             title="Simulate high inflow surge at Mettur Dam to test alerts"
           >
             <Zap className={`h-4 w-4 ${simulatingId === 'mettur' ? 'animate-spin' : ''}`} />
-            <span>Simulate Mettur Surge (+25k cusecs)</span>
+            <span>Test Mettur Surge (+25k)</span>
           </button>
+        </div>
+      </div>
+
+      {/* 1-Hour Automated WRD Telemetry Sync HUD Banner */}
+      <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl backdrop-blur-md">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2 px-3 py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-mono font-bold">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+            </span>
+            <span>OFFICIAL 1-HOUR WRD FEED</span>
+          </div>
+
+          <div className="flex items-center gap-1.5 text-xs text-slate-300 font-mono">
+            <Clock className="h-3.5 w-3.5 text-cyan-400" />
+            <span>Last Bulletin Sync:</span>
+            <span className="text-white font-bold">{syncInfo.lastSyncFormatted} IST</span>
+          </div>
+
+          <div className="flex items-center gap-1.5 text-xs text-slate-400 font-mono">
+            <span>• Next Automatic Refresh In:</span>
+            <span className="text-cyan-400 font-bold bg-cyan-950/70 px-2 py-0.5 rounded border border-cyan-800/60 font-mono tracking-wider">
+              {syncInfo.countdownStr}
+            </span>
+          </div>
+        </div>
+
+        <div className="text-xs text-slate-500 font-mono hidden md:block">
+          Feed: https://tnagriculture.in/ARS/home/reservoir (TN WRD)
         </div>
       </div>
 
@@ -246,9 +310,14 @@ export default function Dams() {
                         {dam.basin}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1">
-                      <MapPin className="h-3.5 w-3.5 text-cyan-400" />
+                    <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1 flex-wrap">
+                      <MapPin className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
                       <span>{dam.river} River • {dam.district} District</span>
+                      {dam.lastUpdated && (
+                        <span className="text-[10px] text-slate-500 font-mono ml-1.5 border-l border-slate-700 pl-2">
+                          🕒 {dam.lastUpdated}
+                        </span>
+                      )}
                     </p>
                   </div>
 

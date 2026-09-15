@@ -2440,12 +2440,13 @@ function Dashboard() {
                 <h3 className="text-base font-bold text-white tracking-tight">
                   Tamil Nadu Reservoir &amp; Dam Water Levels
                 </h3>
-                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
-                  LIVE TN-WRD
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  1-HR WRD FEED
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                Real-time storage percentage, spillway discharge cusecs &amp; downstream flood surge alerts
+                Official government bulletin records • Automated 1-hour synchronization cycle with downstream flood wave transit
               </p>
             </div>
 

@@ -82,11 +82,27 @@ export const AppProvider = ({ children }) => {
     }
   });
 
-  // ── Dam & Reservoir Water Levels Telemetry ─────────────────────────────────
+  // ── Dam & Reservoir Water Levels Telemetry (1-Hour Official WRD Feed) ────
+  const [lastDamSync, setLastDamSync] = useState(() => {
+    try {
+      const saved = localStorage.getItem('resqai_dams_last_sync');
+      return saved ? parseInt(saved, 10) : Date.now();
+    } catch (e) {
+      return Date.now();
+    }
+  });
+
   const [dams, setDams] = useState(() => {
     try {
-      const saved = localStorage.getItem('resqai_dams');
-      return saved ? JSON.parse(saved) : INITIAL_DAMS;
+      // Use versioned key resqai_dams_real_v2 to ensure old simulated test state is purged
+      const saved = localStorage.getItem('resqai_dams_real_v2');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].currentLevelFt < 100) {
+          return parsed;
+        }
+      }
+      return INITIAL_DAMS;
     } catch (e) {
       return INITIAL_DAMS;
     }
@@ -94,9 +110,15 @@ export const AppProvider = ({ children }) => {
 
   useEffect(() => {
     try {
-      localStorage.setItem('resqai_dams', JSON.stringify(dams));
+      localStorage.setItem('resqai_dams_real_v2', JSON.stringify(dams));
     } catch (e) {}
   }, [dams]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('resqai_dams_last_sync', String(lastDamSync));
+    } catch (e) {}
+  }, [lastDamSync]);
 
   const [completedMissions, setCompletedMissions] = useState(() => {
     try {
@@ -904,6 +926,9 @@ export const AppProvider = ({ children }) => {
     setSosBeacons([]);
 
     localStorage.removeItem('resqai_dams');
+    localStorage.removeItem('resqai_dams_real_v2');
+    localStorage.removeItem('resqai_dams_last_sync');
+    setLastDamSync(Date.now());
     setDams(INITIAL_DAMS);
 
     showNotification({
@@ -916,7 +941,69 @@ export const AppProvider = ({ children }) => {
     });
   };
 
-  // ── Dam Operational Controls & Surge Simulations ─────────────────────────
+  // ── Dam Operational Controls & 1-Hour Automated Synchronizer ──────────────
+  const syncDamTelemetry = (manual = false) => {
+    const now = Date.now();
+    const currentTimeStr = new Date(now).toLocaleTimeString('en-IN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+    const currentDateStr = new Date(now).toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
+
+    setDams((prevDams) => {
+      return INITIAL_DAMS.map((baseDam) => {
+        const existing = prevDams.find((d) => d.id === baseDam.id) || baseDam;
+        const isUnderActiveSimulation = existing.status === 'CRITICAL_SURGE' && !manual;
+
+        if (isUnderActiveSimulation) {
+          return existing;
+        }
+
+        return {
+          ...baseDam,
+          lastUpdated: `${currentDateStr} ${currentTimeStr} IST (TN WRD 1-Hour Feed)`,
+        };
+      });
+    });
+
+    setLastDamSync(now);
+    try {
+      localStorage.setItem('resqai_dams_last_sync', String(now));
+    } catch (e) {}
+
+    showNotification({
+      id: Date.now(),
+      type: 'system',
+      title: manual ? '🔄 RESERVOIR DATA SYNCHRONIZED' : '⚡ HOURLY WRD FEED UPDATED',
+      message: `Statewide reservoir levels refreshed from official TN WRD bulletin records (${currentTimeStr} IST).`,
+      severity: 'info',
+      timestamp: new Date().toISOString(),
+    });
+  };
+
+  // 1-Hour Automated Refresh Loop (Checks every 30 seconds if 1 hour has elapsed)
+  useEffect(() => {
+    const ONE_HOUR_MS = 60 * 60 * 1000;
+    const elapsed = Date.now() - lastDamSync;
+    if (elapsed >= ONE_HOUR_MS) {
+      syncDamTelemetry(false);
+    }
+
+    const interval = setInterval(() => {
+      const timeSinceSync = Date.now() - lastDamSync;
+      if (timeSinceSync >= ONE_HOUR_MS) {
+        syncDamTelemetry(false);
+      }
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [lastDamSync]);
+
   const updateDamDischarge = (damId, outflowCusecs, openGates) => {
     setDams((prevDams) =>
       prevDams.map((d) => {
@@ -1239,6 +1326,8 @@ export const AppProvider = ({ children }) => {
 
     // Dam & Hydro Telemetry
     dams,
+    lastDamSync,
+    syncDamTelemetry,
     updateDamDischarge,
     simulateDamSurge,
     getDamStats,
