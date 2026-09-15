@@ -190,8 +190,8 @@ function Layout({ children }) {
             {/* No Active Disasters - Show Safe Status */}
             {hazardBadges.length === 0 && (
               <div className="hidden lg:flex items-center gap-2">
-                <span className="inline-flex items-center rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 px-3 py-0.5 text-[10px] font-semibold tracking-wide uppercase shadow-sm">
-                  All Clear
+                <span className="inline-flex items-center rounded-full bg-emerald-500/20 text-emerald-400 border-2 border-emerald-500/50 px-4 py-1 text-xs font-bold tracking-wide uppercase shadow-lg">
+                  ✓ All Clear
                 </span>
               </div>
             )}
@@ -218,25 +218,25 @@ function Layout({ children }) {
                   }
                 }}
                 title="Reset state to initial defaults"
-                className="p-1.5 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
+                className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-700 transition-colors"
               >
-                <RotateCcw className="h-3.5 w-3.5" />
+                <RotateCcw className="h-4 w-4" />
               </button>
 
-              <div className="hidden md:flex items-center gap-2">
-                <span className="relative flex h-2 w-2">
+              <div className="hidden md:flex items-center gap-2.5 bg-slate-800/50 px-3 py-1.5 rounded-lg border border-slate-700">
+                <span className="relative flex h-2.5 w-2.5">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
                 </span>
-                <span className="text-[11px] text-gray-600 font-medium tracking-wide uppercase">
+                <span className="text-xs text-emerald-400 font-bold tracking-wide uppercase">
                   24/7 Monitoring
                 </span>
               </div>
-              <div className="flex flex-col items-end leading-none">
-                <span className="text-sm font-mono font-semibold text-gray-900 tabular-nums">
+              <div className="flex flex-col items-end leading-none bg-slate-800/50 px-3 py-2 rounded-lg border border-slate-700">
+                <span className="text-base font-mono font-bold text-white tabular-nums">
                   {formattedTime}
                 </span>
-                <span className="text-[10px] text-gray-500 font-medium">
+                <span className="text-[11px] text-slate-400 font-semibold">
                   {formattedDate}
                 </span>
               </div>
