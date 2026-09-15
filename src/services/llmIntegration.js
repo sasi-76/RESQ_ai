@@ -16,14 +16,15 @@
 // ============================================================================
 
 const LLM_CONFIG = {
-  // Groq (Ultra-fast inference)
+  // Groq (Ultra-fast LPU inference)
   GROQ: {
     baseUrl: 'https://api.groq.com/openai/v1',
     apiKey: import.meta.env.VITE_GROQ_API_KEY || '',
     models: {
-      fast: 'llama-3.1-70b-versatile', // Fast, good quality
-      smart: 'llama-3.3-70b-versatile', // Best reasoning
-      vision: 'llama-3.2-90b-vision-preview', // Image analysis
+      fast:      'qwen/qwen3.8-27b',       // Fast, 131K ctx
+      smart:     'openai/gpt-oss-20b',     // Efficient reasoning
+      reasoning: 'openai/gpt-oss-120b',   // Flagship reasoning, 131K ctx
+      vision:    'llama-3.2-90b-vision-preview',
     },
   },
 
@@ -32,9 +33,10 @@ const LLM_CONFIG = {
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
     apiKey: import.meta.env.VITE_GEMINI_API_KEY || '',
     models: {
-      fast: 'gemini-1.5-flash', // Fast, efficient
-      smart: 'gemini-1.5-pro', // Best quality
-      vision: 'gemini-1.5-pro-vision', // Image + text
+      fast:      'gemini-2.5-flash',       // Fast, latest stable
+      smart:     'gemini-2.5-pro',         // Best quality
+      reasoning: 'gemini-2.5-pro',         // Reasoning/thinking
+      vision:    'gemini-2.5-flash',       // Image + text
     },
   },
 
@@ -48,6 +50,50 @@ const LLM_CONFIG = {
     },
   },
 };
+
+// ============================================================================
+// REASONING HELPERS
+// ============================================================================
+
+/**
+ * Strip <think>...</think> chain-of-thought block from DeepSeek-R1 / Gemini
+ * Thinking responses so only the final answer text is returned.
+ */
+function stripThinkingTags(text) {
+  if (!text) return text;
+  // Remove <think> ... </think> blocks (possibly multiline)
+  return text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+}
+
+/**
+ * Strip markdown syntax so plain-text chat bubbles look clean.
+ * Converts: **bold**, *italic*, # headers, --- rules, `code`, > quotes
+ */
+function stripMarkdown(text) {
+  if (!text) return text;
+  return text
+    // Remove fenced code blocks (```...```)
+    .replace(/```[\s\S]*?```/g, (match) => match.replace(/```\w*\n?/g, '').trim())
+    // Bold + italic (***text*** or ___text___)
+    .replace(/\*{3}(.+?)\*{3}/g, '$1')
+    .replace(/_{3}(.+?)_{3}/g, '$1')
+    // Bold (**text** or __text__)
+    .replace(/\*{2}(.+?)\*{2}/g, '$1')
+    .replace(/_{2}(.+?)_{2}/g, '$1')
+    // Italic (*text* or _text_) — only single
+    .replace(/\*(.+?)\*/g, '$1')
+    // Inline code (`code`)
+    .replace(/`(.+?)`/g, '$1')
+    // Headings (## Heading → Heading)
+    .replace(/^#{1,6}\s+/gm, '')
+    // Horizontal rules (--- or ***)
+    .replace(/^[-*_]{3,}\s*$/gm, '─────────────────────')
+    // Blockquotes (> text)
+    .replace(/^>\s+/gm, '')
+    // Trim extra blank lines (3+ → 2)
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
 
 // ============================================================================
 // GROQ LLM FUNCTIONS
@@ -96,6 +142,62 @@ export async function callGroq(prompt, model = 'fast', temperature = 0.7) {
     return data.choices[0].message.content;
   } catch (error) {
     console.error('Groq API error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Call Groq with the DeepSeek-R1 reasoning model.
+ * Automatically strips <think> chain-of-thought blocks from the response.
+ */
+export async function callGroqReasoning(prompt, systemPrompt = null, temperature = 0.6) {
+  const apiKey = LLM_CONFIG.GROQ.apiKey;
+  if (!apiKey) {
+    throw new Error('GROQ API key not found in environment variables');
+  }
+
+  const modelName = LLM_CONFIG.GROQ.models.reasoning;
+
+  const messages = [
+    {
+      role: 'system',
+      content: systemPrompt ||
+        'You are ResQ Copilot, an expert AI assistant specializing in disaster management and emergency response for Tamil Nadu, India. ' +
+        'Provide clear, structured, and actionable answers. Be concise but thorough. ' +
+        'Use relevant emojis to improve readability. Format responses with bullet points when listing items.',
+    },
+    {
+      role: 'user',
+      content: prompt,
+    },
+  ];
+
+  try {
+    const response = await fetch(`${LLM_CONFIG.GROQ.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: modelName,
+        messages,
+        temperature,
+        max_tokens: 4096,
+      }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Groq Reasoning API error ${response.status}: ${errText}`);
+    }
+
+    const data = await response.json();
+    const rawContent = data.choices[0].message.content;
+    // Strip internal chain-of-thought before returning
+    return stripThinkingTags(rawContent);
+  } catch (error) {
+    console.error('Groq Reasoning error:', error);
     throw error;
   }
 }
@@ -379,7 +481,7 @@ Context: ${context}
 }
 
 /**
- * 7. Conversational AI for operators
+ * 7. Conversational AI for operators (standard)
  */
 export async function chatWithAI(message, conversationHistory = []) {
   const historyText = conversationHistory
@@ -398,6 +500,108 @@ Provide helpful, accurate information. If you need more details, ask clarifying 
 `;
 
   return await callLLM(prompt, { temperature: 0.8 });
+}
+
+/**
+ * 7b. Conversational AI using DeepSeek-R1 reasoning model
+ * Provides deeper, more analytical responses for complex emergency queries.
+ * Falls back to Gemini flash if Groq fails.
+ */
+export async function chatWithAIReasoning(message, contextData = {}) {
+  const {
+    disasters = [],
+    teams = [],
+    hospitals = [],
+    sosBeacons = [],
+    stats = {},
+    completedMissions = [],
+  } = contextData;
+
+  const systemPrompt =
+    'You are ResQ Copilot, an expert AI assistant specializing in disaster management and emergency response for Tamil Nadu, India. ' +
+    'You have access to real-time operational data. Provide clear, structured, and actionable answers. ' +
+    'Be concise but thorough. Use relevant emojis to improve readability. ' +
+    'Format responses with bullet points when listing items. Never include raw JSON in your answer.';
+
+  const contextBlock = `
+=== LIVE OPERATIONAL DATA ===
+Active Disasters: ${disasters.length}
+${disasters.map(d => `  • ${d.type} at ${d.areaName} — Severity: ${d.severity}, Risk: ${d.riskPercent}%`).join('\n')}
+
+Response Teams: ${teams.length} total
+${teams.map(t => `  • ${t.name}: ${t.status} (${t.members} members)`).join('\n')}
+
+Hospitals: ${hospitals.length} networked
+${hospitals.map(h => `  • ${h.name}: ${h.ambulances || 0} ambulances, ${h.distance} km away`).join('\n')}
+
+Pending SOS Signals: ${sosBeacons.filter(b => b.status === 'pending').length}
+Overall Risk Index: ${stats.overallRiskPercent || 0}%
+Completed Missions: ${completedMissions.length}
+=== END DATA ===
+`;
+
+  const fullPrompt = `${contextBlock}\nOperator Query: ${message}`;
+
+  // ── Level 1: DeepSeek-R1 on Groq ──────────────────────────────────────────
+  try {
+    console.log('[ResQ] Trying DeepSeek-R1 (Groq)...');
+    const result = await callGroqReasoning(fullPrompt, systemPrompt, 0.6);
+    console.log('[ResQ] GPT-OSS 120B succeeded ✓');
+    return stripMarkdown(result);
+  } catch (e1) {
+    console.warn('[ResQ] GPT-OSS 120B failed:', e1.message);
+  }
+
+  // ── Level 2: Llama 3.3 70B on Groq ────────────────────────────────────────
+  try {
+    console.log('[ResQ] Trying Llama 3.3 70B (Groq)...');
+    const apiKey = LLM_CONFIG.GROQ.apiKey;
+    if (!apiKey) throw new Error('No Groq API key');
+    const resp = await fetch(`${LLM_CONFIG.GROQ.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: LLM_CONFIG.GROQ.models.smart,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user',   content: fullPrompt },
+        ],
+        temperature: 0.7,
+        max_tokens: 2048,
+      }),
+    });
+    if (!resp.ok) throw new Error(`Groq ${resp.status}: ${await resp.text()}`);
+    const data = await resp.json();
+    console.log('[ResQ] GPT-OSS 20B succeeded ✓');
+    return stripMarkdown(data.choices[0].message.content);
+  } catch (e2) {
+    console.warn('[ResQ] GPT-OSS 20B failed:', e2.message);
+  }
+
+  // ── Level 3: Gemini 2.5 Flash ─────────────────────────────────────────────
+  try {
+    console.log('[ResQ] Trying Gemini 2.5 Flash...');
+    const apiKey = LLM_CONFIG.GEMINI.apiKey;
+    if (!apiKey) throw new Error('No Gemini API key');
+    const resp = await fetch(
+      `${LLM_CONFIG.GEMINI.baseUrl}/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `${systemPrompt}\n\n${fullPrompt}` }] }],
+          generationConfig: { temperature: 0.7, maxOutputTokens: 2048 },
+        }),
+      }
+    );
+    if (!resp.ok) throw new Error(`Gemini ${resp.status}: ${await resp.text()}`);
+    const data = await resp.json();
+    console.log('[ResQ] Gemini 2.5 Flash succeeded ✓');
+    return stripMarkdown(stripThinkingTags(data.candidates[0].content.parts[0].text));
+  } catch (e3) {
+    console.error('[ResQ] All providers failed. Last error:', e3.message);
+    throw new Error('All AI providers failed. Open DevTools (F12 → Console) to see the exact errors.');
+  }
 }
 
 /**
@@ -521,6 +725,7 @@ export async function batchAnalyzeTexts(texts, maxConcurrent = 5) {
 export default {
   // Core LLM functions
   callGroq,
+  callGroqReasoning,
   callGemini,
   callLLM,
 
@@ -532,6 +737,7 @@ export default {
   recommendTeamDeployment,
   analyzeDisasterImagery,
   chatWithAI,
+  chatWithAIReasoning,
   predictRiskEscalation,
   generateSituationReport,
   explainAIDecision,
