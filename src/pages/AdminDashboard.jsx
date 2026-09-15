@@ -197,18 +197,15 @@ function AdminDashboard() {
                   {step.status === 'waiting' && <Clock className="h-4 w-4 text-yellow-400" />}
                 </div>
                 <h4 className="text-base font-bold text-white mb-3">{step.name}</h4>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-500">
-                    {step.sources && `${step.sources} sources`}
-                    {step.processed && `${step.processed} records`}
-                    {step.detected && `${step.detected} detected`}
-                    {step.calculated && `${step.calculated} areas`}
-                    {step.changes && `${step.changes} changes`}
-                    {step.generated && `${step.generated} alerts`}
-                    {step.recommendations && `${step.recommendations} actions`}
-                    {step.pending && `${step.pending} pending`}
-                  </span>
-                  <span className="text-blue-400 font-medium">{step.lastUpdate}</span>
+                <div className="text-sm font-semibold text-cyan-400">
+                  {step.sources && `${step.sources} sources`}
+                  {step.processed && `${step.processed} records`}
+                  {step.detected && `${step.detected} detected`}
+                  {step.calculated && `${step.calculated} areas`}
+                  {step.changes && `${step.changes} changes`}
+                  {step.generated && `${step.generated} alerts`}
+                  {step.recommendations && `${step.recommendations} actions`}
+                  {step.pending && `${step.pending} pending`}
                 </div>
               </div>
               {idx < workflowSteps.length - 1 && (
