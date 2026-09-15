@@ -1,7 +1,15 @@
-# Environment variables
+# Environment variables and secrets
 .env
-.env.local
-.env.production
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.crt
+*.cert
+id_rsa*
+*.secret
+credentials*.json
 
 # Dependencies
 node_modules/
@@ -17,7 +25,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# IDE
+# IDE & Editors
 .vscode/
 .idea/
 *.swp
@@ -28,13 +36,16 @@ yarn-error.log*
 .DS_Store
 Thumbs.db
 
-# Temporary files
+# Temporary & Cache
 *.tmp
 .cache/
+.temp/
 
 # Testing
 coverage/
 
-# Claude Code
+# AI Assistants & Local Configs
 .claude/
-node_modules
+.gemini/
+.antigravity/
+.agents/

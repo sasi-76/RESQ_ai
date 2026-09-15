@@ -2,86 +2,6 @@ import { useState } from 'react';
 import { Shield, Brain, Activity, Database, AlertTriangle, CheckCircle2, XCircle, Clock, TrendingUp, Settings, Eye, FileText, ChevronRight, BarChart3 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
-// Mock AI Decision Logs
-const aiDecisionLogs = [
-  {
-    id: 1,
-    timestamp: '2026-09-11T12:45:23',
-    module: 'Hazard Detection Engine',
-    decision: 'Risk Increase Detected',
-    area: 'Cuddalore',
-    previousRisk: 58,
-    newRisk: 76,
-    confidence: 94,
-    dataPoints: 156,
-    algorithm: 'Multi-Hazard Risk Assessment v2.3',
-    reasoning: 'Rainfall exceeded 145mm threshold, water level rising 15% above normal, wind speed 65km/h',
-    status: 'approved',
-    approvedBy: 'Controller-01',
-    approvedAt: '2026-09-11T12:46:10',
-  },
-  {
-    id: 2,
-    timestamp: '2026-09-11T11:30:15',
-    module: 'Alert Generation System',
-    decision: 'Generate Critical Alert',
-    area: 'Cuddalore',
-    alertType: 'Flood Warning',
-    confidence: 89,
-    dataPoints: 89,
-    algorithm: 'Alert Priority Classifier v1.8',
-    reasoning: 'Risk level P1, population 173K+ affected, 3+ hazard indicators active',
-    status: 'approved',
-    approvedBy: 'Controller-01',
-    approvedAt: '2026-09-11T11:31:00',
-  },
-  {
-    id: 3,
-    timestamp: '2026-09-11T10:15:42',
-    module: 'Team Deployment Optimizer',
-    decision: 'Deploy RESQ-03 Charlie to Cuddalore',
-    area: 'Cuddalore',
-    teamId: 'RESQ-03',
-    confidence: 92,
-    dataPoints: 45,
-    algorithm: 'Resource Allocation Optimizer v3.1',
-    reasoning: 'Nearest available search & rescue unit, equipped for flood response, 15min ETA',
-    status: 'approved',
-    approvedBy: 'Controller-02',
-    approvedAt: '2026-09-11T10:16:05',
-  },
-  {
-    id: 4,
-    timestamp: '2026-09-11T09:22:18',
-    module: 'Change Detection AI',
-    decision: 'Cyclone Risk Elevated',
-    area: 'Chidambaram',
-    previousRisk: 20,
-    newRisk: 28,
-    confidence: 78,
-    dataPoints: 67,
-    algorithm: 'Weather Pattern Analyzer v2.0',
-    reasoning: 'Wind pattern shift detected, pressure drop 2mb, satellite imagery shows cloud formation',
-    status: 'pending',
-    approvedBy: null,
-    approvedAt: null,
-  },
-  {
-    id: 5,
-    timestamp: '2026-09-11T08:45:30',
-    module: 'Hospital Capacity Predictor',
-    decision: 'Alert Cuddalore Govt Hospital',
-    area: 'Cuddalore',
-    hospitalId: 'H-001',
-    confidence: 85,
-    dataPoints: 34,
-    algorithm: 'Capacity Forecasting Model v1.5',
-    reasoning: 'Estimated 200+ casualties, current 85 free beds, recommend prepare ICU',
-    status: 'approved',
-    approvedBy: 'Controller-01',
-    approvedAt: '2026-09-11T08:46:12',
-  },
-];
 
 // AI Workflow Steps
 const workflowSteps = [
@@ -173,10 +93,7 @@ function AdminDashboard() {
   const { aiDecisions, updateAiDecision, aiFilter, setAiFilter } = useApp();
   const [selectedLog, setSelectedLog] = useState(null);
 
-  // Use global AI decisions, fallback to mock if empty
-  const allDecisions = aiDecisions.length > 0 ? aiDecisions : aiDecisionLogs;
-
-  const filteredLogs = allDecisions.filter(log => {
+  const filteredLogs = aiDecisions.filter(log => {
     if (aiFilter === 'all') return true;
     return log.status === aiFilter;
   });
@@ -188,8 +105,8 @@ function AdminDashboard() {
 
   const handleReject = (decisionId) => {
     console.log('❌ Rejecting AI decision:', decisionId);
-    const reason = prompt('Reason for rejection (optional):');
-    updateAiDecision(decisionId, 'rejected', reason || 'Rejected by controller');
+    const reason = prompt('Reason for rejection (optional):') || 'Rejected by controller';
+    updateAiDecision(decisionId, 'rejected', reason);
   };
 
   const getStatusColor = (status) => {
@@ -217,7 +134,7 @@ function AdminDashboard() {
             <Brain className="h-6 w-6 text-purple-400" />
           </div>
           <div>
-            <p className="text-2xl font-bold text-white">{allDecisions.length}</p>
+            <p className="text-2xl font-bold text-white">{aiDecisions.length}</p>
             <p className="text-xs text-slate-400 font-medium uppercase tracking-wide">AI Decisions (24h)</p>
           </div>
         </div>
@@ -227,8 +144,8 @@ function AdminDashboard() {
             <CheckCircle2 className="h-6 w-6 text-green-400" />
           </div>
           <div>
-            <p className="text-2xl font-bold text-white">{allDecisions.filter(l => l.status === 'approved').length}</p>
-            <p className="text-xs text-slate-400 font-medium uppercase tracking-wide">Approved</p>
+            <p className="text-2xl font-bold text-white">{aiDecisions.filter(l => l.status === 'approved').length}</p>
+            <p className="text-xs text-slate-400 font-medium uppercase tracking-wide">Auto-Approved</p>
           </div>
         </div>
 
@@ -237,7 +154,7 @@ function AdminDashboard() {
             <Clock className="h-6 w-6 text-yellow-400" />
           </div>
           <div>
-            <p className="text-2xl font-bold text-white">{allDecisions.filter(l => l.status === 'pending').length}</p>
+            <p className="text-2xl font-bold text-white">{aiDecisions.filter(l => l.status === 'pending').length}</p>
             <p className="text-xs text-slate-400 font-medium uppercase tracking-wide">Pending Review</p>
           </div>
         </div>
@@ -248,7 +165,7 @@ function AdminDashboard() {
           </div>
           <div>
             <p className="text-2xl font-bold text-white">
-              {allDecisions.length > 0 ? Math.round(allDecisions.reduce((sum, d) => sum + (d.confidence || 90), 0) / allDecisions.length) : 92}%
+              {aiDecisions.length > 0 ? Math.round(aiDecisions.reduce((sum, d) => sum + (d.confidence || 90), 0) / aiDecisions.length) : 92}%
             </p>
             <p className="text-xs text-slate-400 font-medium uppercase tracking-wide">Avg Confidence</p>
           </div>
@@ -317,19 +234,25 @@ function AdminDashboard() {
                   onClick={() => setAiFilter('all')}
                   className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all hover:scale-105 ${aiFilter === 'all' ? 'bg-blue-600 text-white' : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700'}`}
                 >
-                  All ({allDecisions.length})
+                  All ({aiDecisions.length})
                 </button>
                 <button
                   onClick={() => setAiFilter('approved')}
                   className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all hover:scale-105 ${aiFilter === 'approved' ? 'bg-green-600 text-white' : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700'}`}
                 >
-                  Approved ({allDecisions.filter(l => l.status === 'approved').length})
+                  Approved ({aiDecisions.filter(l => l.status === 'approved').length})
                 </button>
                 <button
                   onClick={() => setAiFilter('pending')}
                   className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all hover:scale-105 ${aiFilter === 'pending' ? 'bg-yellow-600 text-white' : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700'}`}
                 >
-                  Pending ({allDecisions.filter(l => l.status === 'pending').length})
+                  Pending ({aiDecisions.filter(l => l.status === 'pending').length})
+                </button>
+                <button
+                  onClick={() => setAiFilter('rejected')}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all hover:scale-105 ${aiFilter === 'rejected' ? 'bg-red-600 text-white' : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700'}`}
+                >
+                  Rejected ({aiDecisions.filter(l => l.status === 'rejected').length})
                 </button>
               </div>
             </div>
@@ -412,6 +335,14 @@ function AdminDashboard() {
                     <div className="text-xs">
                       <p className="text-green-400 font-semibold mb-1">✓ Approved by {selectedLog.approvedBy}</p>
                       <p className="text-slate-500">{new Date(selectedLog.approvedAt).toLocaleString()}</p>
+                    </div>
+                  ) : selectedLog.status === 'rejected' ? (
+                    <div className="text-xs">
+                      <p className="text-red-400 font-semibold mb-1">✗ Rejected by {selectedLog.approvedBy}</p>
+                      <p className="text-slate-500">{new Date(selectedLog.approvedAt).toLocaleString()}</p>
+                      {selectedLog.rejectionReason && (
+                        <p className="text-slate-400 mt-2 text-[11px]">Reason: {selectedLog.rejectionReason}</p>
+                      )}
                     </div>
                   ) : (
                     <div>

@@ -1,5 +1,7 @@
-import { createContext, useContext, useState, useEffect } from 'react';
-import { monitoredAreas, hospitals, resqTeams, alerts as initialAlerts } from '../data/mockData';
+import { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { monitoredAreas, hospitals as initialHospitals, resqTeams, alerts as initialAlerts, initialAiDecisions } from '../data/mockData';
+import { getUserCurrentLocation, calculateDistanceKm, calculateTransitEta, reverseGeocodeCoordinates } from '../services/locationService';
+import { sendCommanderAlert, sendCitizenAlert } from '../services/notificationService';
 
 const AppContext = createContext();
 
@@ -12,27 +14,473 @@ export const useApp = () => {
 };
 
 export const AppProvider = ({ children }) => {
-  // Core state
-  const [disasters, setDisasters] = useState([]);
-  const [alerts, setAlerts] = useState(initialAlerts);
-  const [teams, setTeams] = useState(resqTeams);
-  const [aiDecisions, setAiDecisions] = useState([]);
+  // ── User Live Location & Manual Search ─────────────────────────────────────
+  const [userLocation, setUserLocation] = useState(() => {
+    try {
+      const saved = localStorage.getItem('resqai_user_location');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.isRealGps && !parsed.isIpFallback && !parsed.name?.toLowerCase().includes('royapuram')) {
+          return parsed;
+        }
+      }
+    } catch (e) {}
+    return {
+      lat: 11.75,
+      lng: 79.77,
+      name: 'Awaiting Live GPS Permission...',
+      isDetected: false,
+    };
+  });
+
+  const [gpsPermissionStatus, setGpsPermissionStatus] = useState('prompt'); // 'prompt' | 'granted' | 'denied'
+  const [isDetectingLocation, setIsDetectingLocation] = useState(false);
+  const [selectedSearchLocation, setSelectedSearchLocation] = useState(null);
+
+  // ── Core State with Local Storage Persistence ──────────────────────────────
+  const [disasters, setDisasters] = useState(() => {
+    try {
+      const saved = localStorage.getItem('resqai_disasters');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const [alerts, setAlerts] = useState(() => {
+    try {
+      const saved = localStorage.getItem('resqai_alerts');
+      return saved ? JSON.parse(saved) : initialAlerts;
+    } catch (e) {
+      return initialAlerts;
+    }
+  });
+
+  const [teams, setTeams] = useState(() => {
+    try {
+      const saved = localStorage.getItem('resqai_teams');
+      return saved ? JSON.parse(saved) : resqTeams;
+    } catch (e) {
+      return resqTeams;
+    }
+  });
+
+  const [hospitals, setHospitals] = useState(() => {
+    try {
+      const saved = localStorage.getItem('resqai_hospitals');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length >= 20) {
+          return parsed;
+        }
+      }
+      return initialHospitals;
+    } catch (e) {
+      return initialHospitals;
+    }
+  });
+
+  const [completedMissions, setCompletedMissions] = useState(() => {
+    try {
+      const saved = localStorage.getItem('resqai_completed_missions');
+      return saved ? JSON.parse(saved) : [
+        {
+          id: 'mission-01',
+          teamId: 'RESQ-02',
+          teamName: 'Bravo Team',
+          area: 'Cuddalore Port',
+          mission: 'Coastal storm surge evacuation and barrier defense',
+          deployedAt: new Date(Date.now() - 6 * 3600000).toISOString(),
+          completedAt: new Date(Date.now() - 2 * 3600000).toISOString(),
+          personnelInvolved: 15,
+          civiliansRescued: 142,
+          notes: 'Evacuated 45 families to temporary relief shelters. Zero casualties.',
+          status: 'completed',
+        },
+      ];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const [sosBeacons, setSosBeacons] = useState(() => {
+    try {
+      const saved = localStorage.getItem('resqai_sos_beacons');
+      return saved ? JSON.parse(saved) : [
+        {
+          id: 'sos-1',
+          senderName: 'Priya Ramanathan',
+          contact: '+91 98401 23456',
+          areaName: 'Cuddalore Old Town',
+          lat: 11.748,
+          lng: 79.765,
+          type: 'Flood Evacuation',
+          message: 'Water level reaching 1st floor. 4 adults and 1 infant trapped on terrace.',
+          peopleCount: 5,
+          severity: 'critical',
+          timestamp: new Date(Date.now() - 15 * 60000).toISOString(),
+          status: 'pending',
+        },
+        {
+          id: 'sos-2',
+          senderName: 'Karthik S.',
+          contact: '+91 94432 78901',
+          areaName: 'Chidambaram West',
+          lat: 11.399,
+          lng: 79.693,
+          type: 'Medical Emergency',
+          message: 'Elderly patient needs oxygen cylinder and dialysis transfer immediately.',
+          peopleCount: 1,
+          severity: 'high',
+          timestamp: new Date(Date.now() - 42 * 60000).toISOString(),
+          status: 'pending',
+        },
+      ];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const [aiDecisions, setAiDecisions] = useState(() => {
+    try {
+      const saved = localStorage.getItem('resqai_ai_decisions');
+      return saved ? JSON.parse(saved) : initialAiDecisions;
+    } catch (e) {
+      return initialAiDecisions;
+    }
+  });
+  const [criticalAlert, setCriticalAlert] = useState(null); // disaster object when risk > 75%
   const [notifications, setNotifications] = useState([]);
   const [selectedArea, setSelectedArea] = useState(null);
   const [hospitalRoutes, setHospitalRoutes] = useState([]);
 
+  // Field Tasks State
+  const [tasks, setTasks] = useState([
+    {
+      id: 1,
+      title: 'Evacuate Residents from Flood Zone',
+      location: 'Cuddalore Old Town',
+      status: 'in-progress',
+      priority: 'immediate',
+      category: 'Evacuation',
+      assignedTeam: 'Alpha Squad',
+      assignedLeader: 'Captain Rajesh',
+      description: 'Evacuate 150+ residents from low-lying areas before water level rises',
+      createdAt: new Date().toISOString(),
+    },
+    {
+      id: 2,
+      title: 'Establish Medical Camp at Relief Center',
+      location: 'District Sports Stadium',
+      status: 'pending',
+      priority: 'high',
+      category: 'Medical',
+      assignedTeam: 'Delta Squad',
+      assignedLeader: 'Dr. Priya Kumar',
+      description: 'Set up field medical facility with triage station',
+      createdAt: new Date().toISOString(),
+    },
+    {
+      id: 3,
+      title: 'Distribute Relief Supplies',
+      location: 'Cuddalore Govt College',
+      status: 'completed',
+      priority: 'medium',
+      category: 'Relief',
+      assignedTeam: 'Charlie Squad',
+      assignedLeader: 'Lt. Arun',
+      description: 'Distribute food packets, water, and blankets to 200 families',
+      createdAt: new Date(Date.now() - 86400000).toISOString(),
+      completedAt: new Date().toISOString(),
+    },
+  ]);
+
   // Filters
-  const [alertFilter, setAlertFilter] = useState('all'); // all, active, resolved
-  const [aiFilter, setAiFilter] = useState('all'); // all, approved, pending, rejected
+  const [alertFilter, setAlertFilter] = useState('all');
+  const [aiFilter, setAiFilter] = useState('all');
 
-  // Add disaster (from Demo Controls or real-time detection)
+  // ── Sync to LocalStorage ───────────────────────────────────────────────────
+  useEffect(() => {
+    try {
+      localStorage.setItem('resqai_user_location', JSON.stringify(userLocation));
+    } catch (e) {}
+  }, [userLocation]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('resqai_disasters', JSON.stringify(disasters));
+    } catch (e) {}
+  }, [disasters]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('resqai_teams', JSON.stringify(teams));
+    } catch (e) {}
+  }, [teams]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('resqai_alerts', JSON.stringify(alerts));
+    } catch (e) {}
+  }, [alerts]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('resqai_hospitals', JSON.stringify(hospitals));
+    } catch (e) {}
+  }, [hospitals]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('resqai_completed_missions', JSON.stringify(completedMissions));
+    } catch (e) {}
+  }, [completedMissions]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('resqai_sos_beacons', JSON.stringify(sosBeacons));
+    } catch (e) {}
+  }, [sosBeacons]);
+
+  // ── Continuous Live GPS Tracking Loop & Telemetry ────────────────────────
+  useEffect(() => {
+    try {
+      localStorage.setItem('resqai_ai_decisions', JSON.stringify(aiDecisions));
+    } catch (e) {
+      console.warn('Failed to save AI decisions to local storage', e);
+    }
+  }, [aiDecisions]);
+
+  const [isLiveTracking, setIsLiveTracking] = useState(true);
+  const [gpsTrackerTelemetry, setGpsTrackerTelemetry] = useState({
+    speed: 0,
+    heading: 0,
+    accuracy: 10,
+    altitude: null,
+    movementState: 'STATIONARY',
+    lastPing: new Date().toISOString(),
+    breadcrumbs: [],
+  });
+
+  const prevCoordRef = useRef({ lat: userLocation.lat, lng: userLocation.lng });
+  const isGeocodingRef = useRef(false);
+
+  // ── Check Browser Permissions on Mount ────────
+  useEffect(() => {
+    if (typeof window !== 'undefined' && navigator.permissions?.query) {
+      navigator.permissions.query({ name: 'geolocation' }).then((result) => {
+        setGpsPermissionStatus(result.state);
+        if (result.state === 'granted') {
+          detectUserLocation().catch(() => {});
+        }
+        result.onchange = () => {
+          setGpsPermissionStatus(result.state);
+          if (result.state === 'granted') {
+            detectUserLocation().catch(() => {});
+          }
+        };
+      }).catch(() => {});
+    }
+  }, []);
+
+  // ── Real-Time Watch Position GPS Tracker ───────────────────────────────────
+  useEffect(() => {
+    if (!isLiveTracking || typeof window === 'undefined' || !navigator.geolocation) return;
+    if (gpsPermissionStatus === 'denied' || (!userLocation.isDetected && gpsPermissionStatus === 'prompt')) {
+      return;
+    }
+
+    let watchId = null;
+
+    const onPosSuccess = async (pos) => {
+      const { latitude, longitude, accuracy, speed, heading, altitude } = pos.coords;
+      const prev = prevCoordRef.current;
+      const distMoved = calculateDistanceKm(prev.lat, prev.lng, latitude, longitude);
+
+      const speedKmh = speed != null ? Math.round(speed * 3.6) : 0;
+      const isMoving = (speedKmh > 1) || (distMoved > 0.04);
+
+      setGpsTrackerTelemetry((t) => ({
+        ...t,
+        speed: speedKmh,
+        heading: heading != null ? Math.round(heading) : t.heading,
+        accuracy: Math.round(accuracy),
+        altitude: altitude != null ? Math.round(altitude) : t.altitude,
+        movementState: isMoving ? 'IN MOTION' : 'STATIONARY',
+        lastPing: new Date().toISOString(),
+      }));
+
+      // If user moved > 40 meters or first detection:
+      if (!userLocation.isDetected || distMoved >= 0.04) {
+        if (isGeocodingRef.current) return;
+        isGeocodingRef.current = true;
+        prevCoordRef.current = { lat: latitude, lng: longitude };
+
+        try {
+          const newLoc = await reverseGeocodeCoordinates(latitude, longitude, accuracy);
+          setUserLocation((curr) => {
+            const hasZoneChanged = curr?.zone?.code !== newLoc.zone?.code;
+            if (hasZoneChanged && curr.isDetected) {
+              showNotification({
+                id: Date.now(),
+                type: 'system',
+                title: '📍 SECTOR BOUNDARY CROSSED',
+                message: `Transitioned into ${newLoc.name} (${newLoc.zone?.code || 'ZONE'})`,
+                severity: 'info',
+                timestamp: new Date().toISOString(),
+              });
+            }
+            return {
+              ...newLoc,
+              isDetected: true,
+              isRealGps: accuracy < 2500,
+            };
+          });
+
+          // Append to breadcrumbs trail
+          setGpsTrackerTelemetry((t) => ({
+            ...t,
+            breadcrumbs: [
+              ...t.breadcrumbs.slice(-30),
+              { lat: latitude, lng: longitude, name: newLoc.name, time: new Date().toISOString() },
+            ],
+          }));
+        } catch (e) {
+          console.warn('Live tracker reverse geocode failed:', e);
+        } finally {
+          isGeocodingRef.current = false;
+        }
+      }
+    };
+
+    const onPosError = (err) => {
+      console.warn('Live GPS tracker error:', err.message);
+    };
+
+    watchId = navigator.geolocation.watchPosition(onPosSuccess, onPosError, {
+      enableHighAccuracy: true,
+      maximumAge: 0,
+      timeout: 10000,
+    });
+
+    return () => {
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+      }
+    };
+  }, [isLiveTracking, userLocation.isDetected]);
+
+  // ── Manual & Movement Simulation Helper (For Testing Movement) ─────────────
+  const simulateGpsMovement = async (newLat, newLng, customNameHint = null) => {
+    prevCoordRef.current = { lat: newLat, lng: newLng };
+    const loc = await reverseGeocodeCoordinates(newLat, newLng, 8, customNameHint);
+    const updated = {
+      ...loc,
+      isDetected: true,
+      isRealGps: true,
+    };
+    setUserLocation(updated);
+    setSelectedSearchLocation(null);
+    setGpsTrackerTelemetry((t) => ({
+      ...t,
+      movementState: 'IN MOTION',
+      lastPing: new Date().toISOString(),
+      breadcrumbs: [
+        ...t.breadcrumbs.slice(-30),
+        { lat: newLat, lng: newLng, name: loc.name, time: new Date().toISOString() },
+      ],
+    }));
+    try {
+      localStorage.setItem('resqai_user_location', JSON.stringify(updated));
+    } catch (e) {}
+    showNotification({
+      id: Date.now(),
+      type: 'system',
+      title: '🛰️ GPS TRACKER POSITION DISPLACED',
+      message: `Sector relocated to ${loc.name}. Threat Zone: ${loc.zone?.code} (${loc.zone?.alertLevel}).`,
+      severity: 'info',
+      timestamp: new Date().toISOString(),
+    });
+    return updated;
+  };
+
+  // ── Location Actions ───────────────────────────────────────────────────────
+  const detectUserLocation = async () => {
+    setIsDetectingLocation(true);
+    try {
+      const loc = await getUserCurrentLocation();
+      setUserLocation(loc);
+      setGpsPermissionStatus('granted');
+      setSelectedSearchLocation(null);
+      prevCoordRef.current = { lat: loc.lat, lng: loc.lng };
+      showNotification({
+        id: Date.now(),
+        type: 'system',
+        title: '🛰️ LIVE GPS ACCESS GRANTED',
+        message: `Command origin locked to ${loc.name} (${loc.zone?.code || 'ZONE'}).`,
+        severity: 'info',
+        timestamp: new Date().toISOString(),
+      });
+      return loc;
+    } catch (err) {
+      console.warn('Geolocation detection:', err.message);
+      if (err.message?.toLowerCase().includes('denied')) {
+        setGpsPermissionStatus('denied');
+      }
+      showNotification({
+        id: Date.now(),
+        type: 'alert',
+        title: 'GPS PERMISSION STATUS',
+        message: err.message || 'Please click "Allow" when prompted by your browser to track live GPS location.',
+        severity: 'warning',
+        timestamp: new Date().toISOString(),
+      });
+      return null;
+    } finally {
+      setIsDetectingLocation(false);
+    }
+  };
+
+  const setSearchLocation = (location) => {
+    setSelectedSearchLocation(location);
+    if (location) {
+      showNotification({
+        id: Date.now(),
+        type: 'system',
+        title: '📍 LOCATION FOCUSED',
+        message: `Analyzing risk & medical distance for ${location.name}`,
+        severity: 'info',
+        timestamp: new Date().toISOString(),
+      });
+    }
+  };
+
+  const setUserExactLocation = (location) => {
+    const verifiedLocation = {
+      ...location,
+      isDetected: true,
+      isUserConfirmed: true,
+    };
+    setUserLocation(verifiedLocation);
+    setSelectedSearchLocation(null);
+    prevCoordRef.current = { lat: location.lat, lng: location.lng };
+    try {
+      localStorage.setItem('resqai_user_location', JSON.stringify(verifiedLocation));
+    } catch (e) {}
+    showNotification({
+      id: Date.now(),
+      type: 'system',
+      title: '📍 GPS TRACKER CALIBRATED',
+      message: `Tracker origin calibrated to ${location.name} (${location.zone?.code || 'ZONE'}).`,
+      severity: 'info',
+      timestamp: new Date().toISOString(),
+    });
+  };
+
+  // ── Disasters Actions ──────────────────────────────────────────────────────
   const addDisaster = (disaster) => {
-    console.log('🔥 Adding disaster to global state:', disaster);
+    setDisasters((prev) => [...prev, disaster]);
 
-    // Add disaster
-    setDisasters(prev => [...prev, disaster]);
-
-    // Create corresponding alert
     const alert = {
       id: `alert-${disaster.id}`,
       disasterId: disaster.id,
@@ -47,9 +495,8 @@ export const AppProvider = ({ children }) => {
       lng: disaster.lng,
     };
 
-    setAlerts(prev => [alert, ...prev]);
+    setAlerts((prev) => [alert, ...prev]);
 
-    // Create AI decision for review
     const aiDecision = {
       id: `decision-${disaster.id}`,
       disasterId: disaster.id,
@@ -58,15 +505,14 @@ export const AppProvider = ({ children }) => {
       area: disaster.areaName,
       decision: `Deploy emergency response to ${disaster.areaName}`,
       confidence: Math.floor(85 + Math.random() * 15),
-      reasoning: `AI detected ${disaster.type} with ${disaster.riskPercent}% risk level. Immediate response recommended based on population density (${Math.floor(Math.random() * 100000)}) and infrastructure vulnerability.`,
+      reasoning: `AI detected ${disaster.type} with ${disaster.riskPercent}% risk level. Immediate response recommended based on population density and infrastructure vulnerability.`,
       status: 'pending',
-      affectedPopulation: Math.floor(Math.random() * 100000),
+      affectedPopulation: Math.floor(Math.random() * 100000) + 15000,
       recommendedTeams: Math.floor(Math.random() * 3) + 1,
     };
 
-    setAiDecisions(prev => [aiDecision, ...prev]);
+    setAiDecisions((prev) => [aiDecision, ...prev]);
 
-    // Show notification
     showNotification({
       id: Date.now(),
       type: 'disaster',
@@ -76,63 +522,84 @@ export const AppProvider = ({ children }) => {
       timestamp: disaster.timestamp,
     });
 
-    return alert;
+    // Trigger critical alert modal + auto push notifications if risk > 75%
+    if ((disaster.riskPercent || 0) > 75) {
+      setCriticalAlert(disaster);
+      // Fire push notifications automatically — no user click needed
+      sendCommanderAlert(disaster);
+      sendCitizenAlert(disaster);
+    }
+
+    return disaster;
   };
 
-  // Remove disaster
   const removeDisaster = (disasterId) => {
-    console.log('🗑️ Removing disaster:', disasterId);
-    setDisasters(prev => prev.filter(d => d.id !== disasterId));
-    setAlerts(prev => prev.map(a => a.disasterId === disasterId ? { ...a, status: 'resolved' } : a));
-  };
-
-  // Update alert status
-  const updateAlertStatus = (alertId, status) => {
-    console.log(`📝 Updating alert ${alertId} to ${status}`);
-    setAlerts(prev =>
-      prev.map(alert =>
-        alert.id === alertId ? { ...alert, status } : alert
+    setDisasters((prev) => prev.filter((d) => String(d.id) !== String(disasterId)));
+    
+    // Remove the alert from dashboard
+    setAlerts((prev) => prev.filter((a) => String(a.disasterId) !== String(disasterId)));
+    
+    // Auto-close any pending AI decisions for this disaster so they don't hang around
+    setAiDecisions((prev) => 
+      prev.map(decision => 
+        (String(decision.disasterId) === String(disasterId) && decision.status === 'pending')
+          ? { 
+              ...decision, 
+              status: 'rejected', 
+              reviewedAt: new Date().toISOString(), 
+              comment: 'Auto-closed: Disaster was manually resolved by commander' 
+            }
+          : decision
       )
     );
   };
 
-  // Approve/Reject AI decision
+  const updateAlertStatus = (alertId, status) => {
+    setAlerts((prev) => prev.map((alert) => (alert.id === alertId ? { ...alert, status } : alert)));
+  };
+
   const updateAiDecision = (decisionId, status, comment = '') => {
-    console.log(`✅ AI Decision ${decisionId}: ${status}`);
-    setAiDecisions(prev =>
-      prev.map(decision =>
+    setAiDecisions((prev) =>
+      prev.map((decision) =>
         decision.id === decisionId
           ? { ...decision, status, reviewedAt: new Date().toISOString(), comment }
           : decision
       )
     );
 
-    // If approved, auto-deploy team
     if (status === 'approved') {
-      const decision = aiDecisions.find(d => d.id === decisionId);
+      const decision = aiDecisions.find((d) => d.id === decisionId);
       if (decision) {
         autoDeployTeam(decision.area, decision.type);
       }
     }
   };
 
-  // Deploy team
-  const deployTeam = (teamId, location, mission) => {
-    console.log(`🚁 Deploying team ${teamId} to ${location}`);
+  const logAiAction = (moduleName, decisionText, reasoningText, status = 'approved') => {
+    const aiDecision = {
+      id: `ai-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      module: moduleName,
+      decision: decisionText,
+      reasoning: reasoningText,
+      status: status,
+      confidence: Math.floor(85 + Math.random() * 15),
+      dataPoints: Math.floor(10 + Math.random() * 200),
+      algorithm: 'ResQ Copilot LLM Engine v1.0',
+      approvedBy: status === 'approved' ? 'Auto-Copilot' : null,
+      approvedAt: status === 'approved' ? new Date().toISOString() : null,
+    };
+    setAiDecisions((prev) => [aiDecision, ...prev]);
+  };
 
-    const team = teams.find(t => t.id === teamId);
-    if (!team) {
-      console.error('Team not found:', teamId);
-      return;
-    }
+  // ── Team Management ────────────────────────────────────────────────────────
 
-    // Check if team is already deployed
-    if (team.status === 'deployed') {
-      console.log('Team already deployed, reassigning...');
-    }
+  const deployTeam = (teamId, location, mission = 'Emergency rescue deployment') => {
+    const team = teams.find((t) => t.id === teamId);
+    if (!team) return false;
 
-    setTeams(prev =>
-      prev.map(t =>
+    setTeams((prev) =>
+      prev.map((t) =>
         t.id === teamId
           ? {
               ...t,
@@ -154,26 +621,35 @@ export const AppProvider = ({ children }) => {
       severity: 'high',
       timestamp: new Date().toISOString(),
     });
+
+    // Auto-approve any pending AI decisions for this area
+    setAiDecisions((prev) => 
+      prev.map(decision => 
+        (decision.status === 'pending' && decision.area === location)
+          ? { 
+              ...decision, 
+              status: 'approved', 
+              approvedBy: 'Auto-Copilot', 
+              approvedAt: new Date().toISOString(), 
+              comment: `Auto-approved by team deployment to ${location}` 
+            }
+          : decision
+      )
+    );
+
+    return true;
   };
 
-  // Auto-deploy team (from AI approval)
   const autoDeployTeam = (area, disasterType) => {
-    // Find available team
-    const availableTeam = teams.find(t => t.status === 'standby');
+    const availableTeam = teams.find((t) => t.status === 'standby');
     if (availableTeam) {
-      deployTeam(
-        availableTeam.id,
-        area,
-        `${disasterType} response operation`
-      );
+      deployTeam(availableTeam.id, area, `${disasterType} response operation`);
     }
   };
 
-  // Recall team
   const recallTeam = (teamId) => {
-    console.log(`🏠 Recalling team ${teamId}`);
-    setTeams(prev =>
-      prev.map(team =>
+    setTeams((prev) =>
+      prev.map((team) =>
         team.id === teamId
           ? { ...team, status: 'standby', location: 'Base', mission: 'Standby', deployedAt: null }
           : team
@@ -181,64 +657,334 @@ export const AppProvider = ({ children }) => {
     );
   };
 
-  // Add hospital route
-  const addHospitalRoute = (route) => {
-    setHospitalRoutes(prev => [...prev, route]);
+  const completeMission = (teamId, report = '', civiliansSaved = 0) => {
+    const team = teams.find((t) => t.id === teamId);
+    if (!team) return;
+
+    const missionRecord = {
+      id: `mission-${Date.now()}`,
+      teamId: team.id,
+      teamName: team.name,
+      area: team.location || 'Active Zone',
+      mission: team.mission || 'Response mission',
+      deployedAt: team.deployedAt || new Date(Date.now() - 3600000).toISOString(),
+      completedAt: new Date().toISOString(),
+      personnelInvolved: team.members,
+      civiliansRescued: Number(civiliansSaved) || Math.floor(Math.random() * 50) + 12,
+      notes: report || 'Rescue mission successfully concluded with all resources accounted for.',
+      status: 'completed',
+    };
+
+    setCompletedMissions((prev) => [missionRecord, ...prev]);
+    recallTeam(teamId);
+
+    showNotification({
+      id: Date.now(),
+      type: 'team',
+      title: 'MISSION CONCLUDED',
+      message: `${team.name} completed mission in ${missionRecord.area}. Resources returned to standby.`,
+      severity: 'info',
+      timestamp: new Date().toISOString(),
+    });
+
+    return missionRecord;
   };
 
-  // Show notification
+  // ── Hospital Actions (Simplified: Focus on Location, Distance, and Ambulances) ──
+  const dispatchAmbulance = (hospitalId, destinationArea = 'Emergency Site') => {
+    let dispatched = false;
+    let hospName = '';
+
+    setHospitals((prev) =>
+      prev.map((h) => {
+        if (h.id === hospitalId && h.ambulances > 0) {
+          dispatched = true;
+          hospName = h.name;
+          return { ...h, ambulances: h.ambulances - 1 };
+        }
+        return h;
+      })
+    );
+
+    if (dispatched) {
+      showNotification({
+        id: Date.now(),
+        type: 'ambulance',
+        title: 'AMBULANCE DISPATCHED',
+        message: `Ambulance en route from ${hospName} to ${destinationArea}`,
+        severity: 'high',
+        timestamp: new Date().toISOString(),
+      });
+      return true;
+    }
+    return false;
+  };
+
+  // ── Hospitals with Dynamic Distance from Disaster Location or User Location ──
+  const getHospitalsWithDistance = () => {
+    let origin = userLocation;
+    
+    // If there are active disasters, use the location of the most critical one
+    if (disasters && disasters.length > 0) {
+      const criticalDisaster = [...disasters].sort((a, b) => (b.riskPercent || 0) - (a.riskPercent || 0))[0];
+      if (criticalDisaster && criticalDisaster.lat && criticalDisaster.lng) {
+        origin = { lat: criticalDisaster.lat, lng: criticalDisaster.lng };
+      }
+    } else if (selectedSearchLocation) {
+      origin = selectedSearchLocation;
+    }
+
+    return hospitals
+      .map((h) => {
+        const distKm = calculateDistanceKm(origin.lat, origin.lng, h.lat, h.lng);
+        const finalDist = distKm != null ? distKm : h.distance || 10;
+        return {
+          ...h,
+          distance: finalDist,
+          transitEta: calculateTransitEta(finalDist),
+        };
+      })
+      .sort((a, b) => a.distance - b.distance);
+  };
+
+  // ── SOS Distress Beacons ───────────────────────────────────────────────────
+  const addSOSBeacon = (beacon) => {
+    const newBeacon = {
+      id: `sos-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      status: 'pending',
+      ...beacon,
+    };
+
+    setSosBeacons((prev) => [newBeacon, ...prev]);
+
+    showNotification({
+      id: Date.now(),
+      type: 'sos',
+      title: '🚨 CITIZEN SOS BEACON',
+      message: `${newBeacon.senderName} (${newBeacon.areaName}): ${newBeacon.message}`,
+      severity: 'critical',
+      timestamp: new Date().toISOString(),
+    });
+
+    return newBeacon;
+  };
+
+  const resolveSOSBeacon = (id, resolutionNotes = 'Assistance dispatched and civilian secured') => {
+    setSosBeacons((prev) =>
+      prev.map((b) => (b.id === id ? { ...b, status: 'resolved', resolution: resolutionNotes } : b))
+    );
+
+    showNotification({
+      id: Date.now(),
+      type: 'sos',
+      title: 'SOS SIGNAL RESOLVED',
+      message: `Distress signal #${id} marked as resolved.`,
+      severity: 'info',
+      timestamp: new Date().toISOString(),
+    });
+  };
+
+  const assignNearestTeamToSOS = (id) => {
+    const sos = sosBeacons.find((b) => b.id === id);
+    if (!sos) return;
+
+    let nearestTeam = null;
+    let minDistance = Infinity;
+
+    teams.forEach((team) => {
+      const distance = calculateDistanceKm(sos.lat, sos.lng, team.lat, team.lng);
+      if (distance !== null && distance < minDistance) {
+        minDistance = distance;
+        nearestTeam = team;
+      }
+    });
+
+    if (nearestTeam) {
+      setSosBeacons((prev) =>
+        prev.map((b) =>
+          b.id === id
+            ? { ...b, status: 'assigned', assignedTeamId: nearestTeam.id, resolution: `Assigned to ${nearestTeam.name} (${minDistance.toFixed(1)} km)` }
+            : b
+        )
+      );
+
+      showNotification({
+        id: Date.now(),
+        type: 'sos',
+        title: 'TEAM ASSIGNED TO SOS',
+        message: `${nearestTeam.name} has been assigned to distress signal #${id} (${minDistance.toFixed(1)} km away).`,
+        severity: 'info',
+        timestamp: new Date().toISOString(),
+      });
+    }
+  };
+
+
+  // ── Notifications ──────────────────────────────────────────────────────────
   const showNotification = (notification) => {
-    setNotifications(prev => [notification, ...prev]);
-
-    // Auto-remove after 5 seconds
+    const id = notification.id
+      ? `${notification.id}-${Math.random().toString(36).slice(2, 7)}`
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const newNotif = { ...notification, id };
+    setNotifications((prev) => [newNotif, ...prev.slice(0, 4)]);
     setTimeout(() => {
-      removeNotification(notification.id);
-    }, 5000);
+      removeNotification(id);
+    }, 6000);
   };
 
-  // Remove notification
+  const addHospitalRoute = (route) => {
+    setHospitalRoutes((prev) => [route, ...prev]);
+  };
+
+  const dismissCriticalAlert = () => setCriticalAlert(null);
+
   const removeNotification = (notificationId) => {
-    setNotifications(prev => prev.filter(n => n.id !== notificationId));
+    setNotifications((prev) => prev.filter((n) => n.id !== notificationId));
   };
 
-  // Clear all disasters
   const clearAllDisasters = () => {
-    console.log('🧹 Clearing all disasters');
     setDisasters([]);
-    setAlerts(prev => prev.map(a => ({ ...a, status: 'resolved' })));
+    setAlerts((prev) => prev.map((a) => ({ ...a, status: 'resolved' })));
   };
 
-  // Get filtered alerts
+  const resetToDefaults = () => {
+    localStorage.removeItem('resqai_disasters');
+    localStorage.removeItem('resqai_teams');
+    localStorage.removeItem('resqai_alerts');
+    localStorage.removeItem('resqai_hospitals');
+    localStorage.removeItem('resqai_completed_missions');
+    localStorage.removeItem('resqai_sos_beacons');
+    localStorage.removeItem('resqai_user_location');
+
+    setUserLocation({
+      lat: 11.75,
+      lng: 79.77,
+      name: 'Cuddalore Operations HQ',
+      isDetected: false,
+    });
+    setSelectedSearchLocation(null);
+    setDisasters([]);
+    setTeams(resqTeams);
+    setAlerts(initialAlerts);
+    setHospitals(initialHospitals);
+    setCompletedMissions([
+      {
+        id: 'mission-01',
+        teamId: 'RESQ-02',
+        teamName: 'Bravo Team',
+        area: 'Cuddalore Port',
+        mission: 'Coastal storm surge evacuation and barrier defense',
+        deployedAt: new Date(Date.now() - 6 * 3600000).toISOString(),
+        completedAt: new Date(Date.now() - 2 * 3600000).toISOString(),
+        personnelInvolved: 15,
+        civiliansRescued: 142,
+        notes: 'Evacuated 45 families to temporary relief shelters. Zero casualties.',
+        status: 'completed',
+      },
+    ]);
+    setSosBeacons([]);
+
+    showNotification({
+      id: Date.now(),
+      type: 'system',
+      title: 'SYSTEM RESTORED',
+      message: 'All application state and persistent storage reset to defaults.',
+      severity: 'info',
+      timestamp: new Date().toISOString(),
+    });
+  };
+
   const getFilteredAlerts = () => {
     if (alertFilter === 'all') return alerts;
-    return alerts.filter(a => a.status === alertFilter);
+    return alerts.filter((a) => a.status === alertFilter);
   };
 
-  // Get filtered AI decisions
   const getFilteredAiDecisions = () => {
     if (aiFilter === 'all') return aiDecisions;
-    return aiDecisions.filter(d => d.status === aiFilter);
+    return aiDecisions.filter((d) => d.status === aiFilter);
   };
 
-  // Get resource stats
+  // ── Task Management Functions ──────────────────────────────────────────────
+  const updateTaskStatus = (taskId, newStatus) => {
+    setTasks((prev) =>
+      prev.map((task) =>
+        task.id === taskId
+          ? {
+              ...task,
+              status: newStatus,
+              ...(newStatus === 'in-progress' ? { startedAt: new Date().toISOString() } : {}),
+            }
+          : task
+      )
+    );
+
+    showNotification({
+      id: Date.now(),
+      type: 'task',
+      title: 'Task Status Updated',
+      message: `Task status changed to: ${newStatus}`,
+      severity: 'info',
+      timestamp: new Date().toISOString(),
+    });
+  };
+
+  const completeTask = (taskId, details = {}) => {
+    setTasks((prev) =>
+      prev.map((task) =>
+        task.id === taskId
+          ? {
+              ...task,
+              status: 'completed',
+              completedAt: new Date().toISOString(),
+              completionNotes: details.notes || '',
+              completedBy: details.completedBy || 'Field Officer',
+            }
+          : task
+      )
+    );
+
+    showNotification({
+      id: Date.now(),
+      type: 'task',
+      title: 'Task Completed',
+      message: `Task successfully completed`,
+      severity: 'team',
+      timestamp: new Date().toISOString(),
+    });
+  };
+
+  const getTaskStats = () => {
+    const total = tasks.length;
+    const pending = tasks.filter((t) => t.status === 'pending').length;
+    const inProgress = tasks.filter((t) => t.status === 'in-progress').length;
+    const completed = tasks.filter((t) => t.status === 'completed').length;
+    const immediate = tasks.filter((t) => t.priority === 'immediate' && t.status !== 'completed').length;
+
+    return {
+      total,
+      pending,
+      inProgress,
+      completed,
+      immediate,
+      completionRate: total > 0 ? Math.round((completed / total) * 100) : 0,
+    };
+  };
+
+  // ── Resources & Stats (Without Hospital Bed references) ────────────────────
   const getResourceStats = () => {
-    // Teams
     const totalTeams = teams.length;
-    const deployedTeams = teams.filter(t => t.status === 'deployed').length;
+    const deployedTeams = teams.filter((t) => t.status === 'deployed').length;
     const availableTeams = totalTeams - deployedTeams;
 
-    // Personnel
-    const totalPersonnel = teams.reduce((sum, t) => sum + t.members, 0);
-    const deployedPersonnel = teams.filter(t => t.status === 'deployed').reduce((sum, t) => sum + t.members, 0);
+    const totalPersonnel = teams.reduce((sum, t) => sum + (t.members || 0), 0);
+    const deployedPersonnel = teams
+      .filter((t) => t.status === 'deployed')
+      .reduce((sum, t) => sum + (t.members || 0), 0);
     const availablePersonnel = totalPersonnel - deployedPersonnel;
 
-    // Ambulances
-    const totalAmbulances = hospitals.reduce((sum, h) => sum + h.ambulances, 0);
-
-    // Beds
-    const totalBeds = hospitals.reduce((sum, h) => sum + h.totalBeds, 0);
-    const availableBeds = hospitals.reduce((sum, h) => sum + h.freeBeds, 0);
-    const occupiedBeds = totalBeds - availableBeds;
+    const totalAmbulances = hospitals.reduce((sum, h) => sum + (h.ambulances || 0), 0);
+    const emergencyFacilities = hospitals.filter((h) => h.emergency).length;
 
     return {
       teams: {
@@ -254,68 +1000,100 @@ export const AppProvider = ({ children }) => {
       ambulances: {
         total: totalAmbulances,
       },
-      beds: {
-        total: totalBeds,
-        available: availableBeds,
-        occupied: occupiedBeds,
+      facilities: {
+        total: hospitals.length,
+        emergencyReady: emergencyFacilities,
       },
     };
   };
 
-  // Get stats for dashboard
   const getStats = () => {
     const activeDisasters = disasters.length;
-    const activeAlerts = alerts.filter(a => a.status === 'active').length;
-    const deployedTeams = teams.filter(t => t.status === 'deployed').length;
-    const criticalAreas = disasters.filter(d => d.severity === 'critical').length;
+    const activeAlerts = alerts.filter((a) => a.status === 'active').length;
+    const deployedTeams = teams.filter((t) => t.status === 'deployed').length;
+    const criticalAreas = disasters.filter((d) => d.severity === 'critical').length;
     const resources = getResourceStats();
+
+    let overallRiskPercent = 76;
+    if (disasters.length > 0) {
+      const maxDisasterRisk = Math.max(...disasters.map((d) => d.riskPercent || 50));
+      overallRiskPercent = Math.max(overallRiskPercent, maxDisasterRisk);
+    }
+
+    const hospitalsWithDist = getHospitalsWithDistance();
+    const nearestHospital = hospitalsWithDist[0] || null;
 
     return {
       activeDisasters,
       activeAlerts,
       deployedTeams,
       criticalAreas,
+      overallRiskPercent,
       totalHospitals: hospitals.length,
+      nearestHospital,
       totalTeams: teams.length,
       availableTeams: resources.teams.available,
       availablePersonnel: resources.personnel.available,
       totalPersonnel: resources.personnel.total,
-      availableBeds: resources.beds.available,
-      totalBeds: resources.beds.total,
+      totalAmbulances: resources.ambulances.total,
+      pendingSosCount: sosBeacons.filter((b) => b.status === 'pending').length,
+      completedMissionsCount: completedMissions.length,
     };
   };
 
-  // Get monitored areas with current disaster data
   const getMonitoredAreasWithData = () => {
-    return monitoredAreas.map(area => {
-      const areaDisasters = disasters.filter(d => d.areaName === area.name);
+    const origin = selectedSearchLocation || userLocation;
+    return monitoredAreas.map((area) => {
+      const areaDisasters = disasters.filter((d) => d.areaName === area.name);
       const hasActive = areaDisasters.length > 0;
       const maxRisk = hasActive
-        ? Math.max(...areaDisasters.map(d => d.riskPercent))
+        ? Math.max(...areaDisasters.map((d) => d.riskPercent))
         : area.riskPercent;
+
+      const dist = calculateDistanceKm(origin.lat, origin.lng, area.lat, area.lng);
 
       return {
         ...area,
         riskPercent: maxRisk,
         hasActiveDisaster: hasActive,
         activeDisasters: areaDisasters,
+        distanceFromUserKm: dist,
       };
     });
   };
 
   const value = {
-    // State
+    // Location state & Live GPS Tracker
+    userLocation,
+    isDetectingLocation,
+    selectedSearchLocation,
+    gpsPermissionStatus,
+    isLiveTracking,
+    setIsLiveTracking,
+    gpsTrackerTelemetry,
+    simulateGpsMovement,
+    detectUserLocation,
+    setSearchLocation,
+    setUserExactLocation,
+
+    // Core state
     disasters,
     alerts,
     teams,
-    hospitals,
+    hospitals: getHospitalsWithDistance(),
+    rawHospitals: hospitals,
     aiDecisions,
     notifications,
+    criticalAlert,
+    dismissCriticalAlert,
     selectedArea,
     hospitalRoutes,
     alertFilter,
     aiFilter,
+    completedMissions,
+    sosBeacons,
     monitoredAreas: getMonitoredAreasWithData(),
+    tasks,
 
     // Actions
     addDisaster,
@@ -323,20 +1101,33 @@ export const AppProvider = ({ children }) => {
     clearAllDisasters,
     updateAlertStatus,
     updateAiDecision,
+    logAiAction,
     deployTeam,
+    autoDeployTeam,
     recallTeam,
+    completeMission,
+    dispatchAmbulance,
+    addSOSBeacon,
+    resolveSOSBeacon,
+    assignNearestTeamToSOS,
     addHospitalRoute,
     showNotification,
     removeNotification,
     setSelectedArea,
     setAlertFilter,
     setAiFilter,
+    resetToDefaults,
 
     // Computed
     getFilteredAlerts,
     getFilteredAiDecisions,
     getStats,
     getResourceStats,
+
+    // Task management
+    updateTaskStatus,
+    completeTask,
+    getTaskStats,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

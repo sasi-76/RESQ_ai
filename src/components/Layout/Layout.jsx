@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import Notifications from '../Notifications';
+import { useApp } from '../../context/AppContext';
 import {
   LayoutDashboard,
   Bell,
@@ -12,6 +13,10 @@ import {
   Shield,
   Zap,
   Award,
+  CheckSquare,
+  FileText,
+  RotateCcw,
+  Radio,
 } from 'lucide-react';
 
 const navItems = [
@@ -20,18 +25,22 @@ const navItems = [
   { to: '/map', icon: Map, label: 'Map' },
   { to: '/hospitals', icon: Building2, label: 'Hospitals' },
   { to: '/teams', icon: Users, label: 'Teams' },
+  { to: '/tasks', icon: CheckSquare, label: 'Field Tasks' },
   { to: '/missions', icon: Award, label: 'Missions' },
   { to: '/recommendations', icon: ClipboardList, label: 'Recommendations' },
+  { to: '/reports', icon: FileText, label: 'EOC Reports' },
   { to: '/admin', icon: Shield, label: 'AI Admin' },
   { to: '/demo', icon: Zap, label: 'Demo Controls' },
 ];
 
-const hazardBadges = [
-  { label: 'Flood', color: 'from-blue-500 to-blue-700' },
-  { label: 'Cyclone', color: 'from-cyan-500 to-teal-600' },
-  { label: 'Earthquake', color: 'from-amber-500 to-orange-600' },
-  { label: 'Volcanic Eruption', color: 'from-red-500 to-rose-700' },
-];
+const hazardTypeConfig = {
+  flood: { label: 'Flood', color: 'from-blue-500 to-blue-700' },
+  cyclone: { label: 'Cyclone', color: 'from-cyan-500 to-teal-600' },
+  earthquake: { label: 'Earthquake', color: 'from-amber-500 to-orange-600' },
+  'volcanic-eruption': { label: 'Volcanic Eruption', color: 'from-red-500 to-rose-700' },
+  wildfire: { label: 'Wildfire', color: 'from-orange-500 to-red-600' },
+  landslide: { label: 'Landslide', color: 'from-yellow-600 to-orange-600' },
+};
 
 function Layout({ children }) {
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -57,6 +66,15 @@ function Layout({ children }) {
     month: 'short',
     day: 'numeric',
   });
+
+  const { resetToDefaults, getStats, disasters } = useApp();
+  const stats = getStats();
+
+  // Get unique active disaster types
+  const activeHazardTypes = [...new Set(disasters.map(d => d.type))];
+  const hazardBadges = activeHazardTypes
+    .map(type => hazardTypeConfig[type])
+    .filter(Boolean);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-900 text-slate-100">
@@ -116,51 +134,88 @@ function Layout({ children }) {
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Top Header */}
         <header className="flex h-14 items-center justify-between border-b border-slate-800/60 bg-slate-950/80 backdrop-blur-sm px-6 shrink-0">
-          {/* Left: Branding */}
-          <div className="flex items-center gap-3">
-            <h1 className="text-lg font-bold tracking-wide">
-              <span className="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-                RESQAI
+            {/* Left: Branding */}
+            <div className="flex items-center gap-3">
+              <h1 className="text-lg font-bold tracking-wide">
+                <span className="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+                  RESQAI
+                </span>
+              </h1>
+              <span className="hidden sm:inline-block h-4 w-px bg-slate-700" />
+              <span className="hidden sm:inline-block text-[11px] text-slate-500 font-medium tracking-wide uppercase">
+                Emergency Operations Center
               </span>
-            </h1>
-            <span className="hidden sm:inline-block h-4 w-px bg-slate-700" />
-            <span className="hidden sm:inline-block text-[11px] text-slate-500 font-medium tracking-wide uppercase">
-              Emergency Operations Center
-            </span>
-          </div>
+            </div>
 
-          {/* Center: Hazard Badges */}
-          <div className="hidden lg:flex items-center gap-2">
-            {hazardBadges.map(({ label, color }) => (
-              <span
-                key={label}
-                className={`inline-flex items-center rounded-full bg-gradient-to-r ${color} px-3 py-0.5 text-[10px] font-semibold tracking-wide text-white uppercase shadow-sm`}
+            {/* Center: Active Hazard Badges - Only show when disasters exist */}
+            {hazardBadges.length > 0 && (
+              <div className="hidden lg:flex items-center gap-2">
+                {hazardBadges.map(({ label, color }) => (
+                  <span
+                    key={label}
+                    className={`inline-flex items-center rounded-full bg-gradient-to-r ${color} px-3 py-0.5 text-[10px] font-semibold tracking-wide text-white uppercase shadow-sm animate-pulse`}
+                    title={`Active ${label} Disaster`}
+                  >
+                    {label}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* No Active Disasters - Show Safe Status */}
+            {hazardBadges.length === 0 && (
+              <div className="hidden lg:flex items-center gap-2">
+                <span className="inline-flex items-center rounded-full bg-gradient-to-r from-green-500 to-emerald-600 px-3 py-0.5 text-[10px] font-semibold tracking-wide text-white uppercase shadow-sm">
+                  All Clear
+                </span>
+              </div>
+            )}
+
+            {/* Right: Status + Clock */}
+            <div className="flex items-center gap-3">
+              {/* SOS Alert Badge */}
+              {stats.pendingSosCount > 0 && (
+                <NavLink
+                  to="/reports"
+                  className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/20 border border-red-500/40 text-red-300 text-xs font-bold animate-pulse hover:bg-red-500/30 transition-colors"
+                  title={`${stats.pendingSosCount} pending civilian distress signals`}
+                >
+                  <Radio className="h-3.5 w-3.5 text-red-400" />
+                  <span>{stats.pendingSosCount} SOS</span>
+                </NavLink>
+              )}
+
+              {/* Quick Reset Button */}
+              <button
+                onClick={() => {
+                  if (window.confirm('Reset all demo disasters, deployments, and storage to factory defaults?')) {
+                    resetToDefaults();
+                  }
+                }}
+                title="Reset state to initial defaults"
+                className="p-1.5 text-slate-500 hover:text-slate-300 rounded-lg hover:bg-slate-800 transition-colors"
               >
-                {label}
-              </span>
-            ))}
-          </div>
+                <RotateCcw className="h-3.5 w-3.5" />
+              </button>
 
-          {/* Right: Status + Clock */}
-          <div className="flex items-center gap-4">
-            <div className="hidden md:flex items-center gap-2">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
-              </span>
-              <span className="text-[11px] text-slate-400 font-medium tracking-wide uppercase">
-                Controller Operated | 24/7 Monitoring
-              </span>
+              <div className="hidden md:flex items-center gap-2">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
+                </span>
+                <span className="text-[11px] text-slate-400 font-medium tracking-wide uppercase">
+                  24/7 Monitoring
+                </span>
+              </div>
+              <div className="flex flex-col items-end leading-none">
+                <span className="text-sm font-mono font-semibold text-slate-200 tabular-nums">
+                  {formattedTime}
+                </span>
+                <span className="text-[10px] text-slate-500 font-medium">
+                  {formattedDate}
+                </span>
+              </div>
             </div>
-            <div className="flex flex-col items-end leading-none">
-              <span className="text-sm font-mono font-semibold text-slate-200 tabular-nums">
-                {formattedTime}
-              </span>
-              <span className="text-[10px] text-slate-500 font-medium">
-                {formattedDate}
-              </span>
-            </div>
-          </div>
         </header>
 
         {/* Page Content */}

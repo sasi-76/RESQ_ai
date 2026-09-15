@@ -10,6 +10,10 @@ import Recommendations from './pages/Recommendations';
 import AdminDashboard from './pages/AdminDashboard';
 import DemoControls from './pages/DemoControls';
 import MissionStatus from './pages/MissionStatus';
+import FieldTasks from './pages/FieldTasks';
+import IncidentReports from './pages/IncidentReports';
+import ResQCopilot from './components/AICopilot/ResQCopilot';
+import CriticalDisasterAlert from './components/CriticalDisasterAlert';
 
 function App() {
   return (
@@ -23,11 +27,16 @@ function App() {
             <Route path="/map" element={<MapView />} />
             <Route path="/hospitals" element={<Hospitals />} />
             <Route path="/teams" element={<Teams />} />
+            <Route path="/tasks" element={<FieldTasks />} />
+            <Route path="/field-tasks" element={<FieldTasks />} />
+            <Route path="/missions" element={<MissionStatus />} />
+            <Route path="/reports" element={<IncidentReports />} />
             <Route path="/recommendations" element={<Recommendations />} />
             <Route path="/admin" element={<AdminDashboard />} />
-            <Route path="/missions" element={<MissionStatus />} />
             <Route path="/demo" element={<DemoControls />} />
           </Routes>
+          <ResQCopilot />
+          <CriticalDisasterAlert />
         </Layout>
       </BrowserRouter>
     </AppProvider>

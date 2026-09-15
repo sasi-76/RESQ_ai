@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Zap, MapPin, AlertTriangle, Droplets, Wind, Activity, Mountain, Plus, Trash2, Play, Navigation, Hospital, X, Clock, Bed, Ambulance } from 'lucide-react';
+import { Zap, MapPin, AlertTriangle, Droplets, Wind, Activity, Mountain, Plus, Trash2, Play, Navigation, Hospital, X, Clock, Bed, Ambulance, Smartphone, MessageSquare } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { monitoredAreas, hospitals } from '../data/mockData';
+import { sendSOSAlert } from '../services/notificationService';
 
 const disasterTypes = [
   { id: 'flood', label: 'Flood', icon: Droplets, color: '#3b82f6', emoji: '🌊' },
@@ -18,10 +19,11 @@ const severityLevels = [
 ];
 
 function DemoControls() {
-  const { disasters, addDisaster, removeDisaster, clearAllDisasters } = useApp();
+  const { disasters, addDisaster, removeDisaster, clearAllDisasters, addSOSBeacon } = useApp();
   const [selectedDisaster, setSelectedDisaster] = useState(null);
   const [routeInfo, setRouteInfo] = useState(null);
   const [showRouteModal, setShowRouteModal] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [formData, setFormData] = useState({
     location: 'Cuddalore', // Default location so button works immediately
     customLat: '',
@@ -124,12 +126,7 @@ function DemoControls() {
 
   const handleClearAll = () => {
     console.log('🧹 Clear All clicked');
-    if (confirm('Clear all active disasters? This will affect all pages.')) {
-      console.log('✅ Clearing all disasters');
-      clearAllDisasters();
-    } else {
-      console.log('❌ Clear cancelled');
-    }
+    setShowClearConfirm(true);
   };
 
   const handleSimulateRealtime = () => {
@@ -580,6 +577,116 @@ function DemoControls() {
         </div>
       </div>
 
+      {/* ── CITIZEN WEBHOOK SIMULATOR ── */}
+      <div className="glass-card p-6 border-l-4 border-l-orange-500 relative overflow-hidden">
+        {/* Background visual flair */}
+        <div className="absolute right-0 top-0 w-64 h-full bg-gradient-to-l from-orange-500/10 to-transparent pointer-events-none"></div>
+        <div className="absolute -right-8 -top-8 w-32 h-32 bg-orange-500/20 blur-3xl rounded-full"></div>
+        
+        <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-3">
+          <Smartphone className="h-6 w-6 text-orange-400" />
+          Citizen Webhook Simulator (SOS)
+        </h3>
+        <p className="text-sm text-slate-400 mb-6 max-w-2xl">
+          Simulate incoming emergency payloads from the public. In production, these buttons represent endpoints that would be triggered automatically by Twilio WhatsApp bots or Telecom USSD gateways.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 relative z-10">
+          
+          {/* WhatsApp Simulation */}
+          <div className="p-5 bg-slate-900/60 rounded-xl border border-slate-700/60 hover:border-green-500/30 transition-all group shadow-md">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="p-2 bg-green-500/20 rounded-lg group-hover:bg-green-500/30 transition-colors">
+                <MessageSquare className="h-6 w-6 text-green-400" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-white">WhatsApp Emergency Bot</h4>
+                <p className="text-xs text-slate-400">Triggers via +91 98432 79397</p>
+              </div>
+            </div>
+            <p className="text-xs text-slate-500 mb-4 h-12">
+              Injects a mock webhook payload representing a citizen sharing their live location via the WhatsApp Bot.
+            </p>
+            <button
+              onClick={() => {
+                const beacon = {
+                  senderName: 'Rajesh K. (WhatsApp)',
+                  contact: '+91 98432 79397',
+                  areaName: 'Velachery',
+                  lat: 12.971,
+                  lng: 80.218,
+                  type: 'Trapped in Building',
+                  message: 'Ground floor flooded, stuck on 2nd floor with elderly parents. Need rescue boat.',
+                  peopleCount: 3,
+                  severity: 'critical',
+                  source: 'WhatsApp',
+                };
+                addSOSBeacon(beacon);
+                sendSOSAlert(beacon);
+              }}
+              className="w-full px-4 py-3 bg-slate-800 hover:bg-green-600/20 text-green-400 hover:text-green-300 font-semibold rounded-lg border border-slate-700 hover:border-green-500/50 transition-all flex items-center justify-center gap-2 active:scale-95"
+            >
+              <Play className="h-4 w-4" />
+              Simulate WhatsApp Payload
+            </button>
+          </div>
+
+          {/* SMS / USSD Simulation */}
+          <div className="p-5 bg-slate-900/60 rounded-xl border border-slate-700/60 hover:border-blue-500/30 transition-all group shadow-md">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="p-2 bg-blue-500/20 rounded-lg group-hover:bg-blue-500/30 transition-colors">
+                <Smartphone className="h-6 w-6 text-blue-400" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-white">SMS / Cell-Tower Fallback</h4>
+                <p className="text-xs text-slate-400">Triggers via Telecom APIs</p>
+              </div>
+            </div>
+            <p className="text-xs text-slate-500 mb-4 h-12">
+              Injects a mock payload representing an offline SMS triangulated by nearby cell towers during an internet blackout.
+            </p>
+            <button
+              onClick={() => {
+                const beacon = {
+                  senderName: 'Unknown Civilian (SMS)',
+                  contact: '+91 94441 12233',
+                  areaName: 'Pallikaranai Marsh',
+                  lat: 12.934,
+                  lng: 80.212,
+                  type: 'Medical Emergency',
+                  message: 'DIABETIC SHOCK. NO INSULIN. NO INTERNET.',
+                  peopleCount: 1,
+                  severity: 'high',
+                  source: 'SMS_Gateway',
+                };
+                addSOSBeacon(beacon);
+                sendSOSAlert(beacon);
+              }}
+              className="w-full px-4 py-3 bg-slate-800 hover:bg-blue-600/20 text-blue-400 hover:text-blue-300 font-semibold rounded-lg border border-slate-700 hover:border-blue-500/50 transition-all flex items-center justify-center gap-2 active:scale-95"
+            >
+              <Play className="h-4 w-4" />
+              Simulate Triangulated SMS
+            </button>
+          </div>
+
+        </div>
+
+        {/* Live Ntfy App Instructions */}
+        <div className="mt-6 p-5 bg-slate-900/80 rounded-xl border border-orange-500/30 relative z-10 shadow-lg">
+          <h4 className="text-sm font-bold text-orange-400 flex items-center gap-2 mb-2">
+            <Zap className="h-4 w-4" />
+            Live Phone Integration (Try it now!)
+          </h4>
+          <p className="text-xs text-slate-300 leading-relaxed">
+            You can generate a real SOS from your phone using the free <strong>ntfy</strong> app.<br/>
+            1. Install the <a href="https://ntfy.sh" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">ntfy app</a> (iOS/Android).<br/>
+            2. Open the app and subscribe to the topic: <strong className="text-white bg-slate-800 px-1 rounded">resq-tn-sos-inbound</strong><br/>
+            3. Tap the topic, type a message like <code className="bg-black/50 px-1 rounded text-orange-300">Location: Adyar. Flooded, need rescue!</code>, and hit Send.<br/>
+            4. The SOS will instantly appear on your Incident Reports dashboard!
+          </p>
+        </div>
+      </div>
+
       {/* Export/Integration Info */}
       <div className="glass-card p-5 border-l-4 border-l-blue-500 bg-blue-500/5">
         <h4 className="text-sm font-semibold text-blue-400 mb-2">💡 Integration Tip</h4>
@@ -742,7 +849,7 @@ function DemoControls() {
                             </div>
                           </div>
                           <div className="flex items-center gap-4 mt-2 text-xs text-slate-400">
-                            <span>🛏️ {hospital.freeBeds} beds</span>
+                            <span>🏥 {hospital.type || 'Emergency Trauma'}</span>
                             <span>🚑 {hospital.ambulances} ambulances</span>
                           </div>
                         </div>
@@ -757,7 +864,32 @@ function DemoControls() {
                 <button
                   onClick={() => {
                     console.log('📞 Dispatching ambulance to:', routeInfo.nearestHospital.name);
-                    alert(`🚑 Ambulance dispatched from ${routeInfo.nearestHospital.name}\n\nETA: ${routeInfo.travelTime} minutes\nDistance: ${routeInfo.distance}`);
+                    
+                    const notification = document.createElement('div');
+                    notification.className = 'fixed top-24 right-6 z-[100] animate-slide-up';
+                    notification.innerHTML = `
+                      <div class="glass-card p-4 border-l-4 border-l-emerald-500 bg-emerald-950/80 shadow-2xl shadow-emerald-500/20 backdrop-blur-xl max-w-md rounded-xl border border-slate-700">
+                        <div class="flex items-start gap-3">
+                          <div class="text-2xl mt-1">🚑</div>
+                          <div>
+                            <h4 class="text-sm font-bold text-emerald-400 mb-1 tracking-wide">AMBULANCE DISPATCHED</h4>
+                            <p class="text-xs text-slate-300 mb-2">Unit dispatched from ${routeInfo.nearestHospital.name}</p>
+                            <div class="flex items-center gap-4 bg-emerald-900/40 p-2 rounded-lg border border-emerald-500/20">
+                              <p class="text-xs text-emerald-300 font-bold">⏱️ ETA: ${routeInfo.travelTime} mins</p>
+                              <p class="text-xs text-emerald-300 font-bold">📍 Dist: ${routeInfo.distance}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    `;
+                    document.body.appendChild(notification);
+                    setTimeout(() => {
+                      notification.style.opacity = '0';
+                      notification.style.transition = 'opacity 0.5s ease';
+                      setTimeout(() => notification.remove(), 500);
+                    }, 4000);
+
+                    setShowRouteModal(false); // Close the modal for better UX
                   }}
                   className="flex-1 px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-semibold rounded-lg transition-all flex items-center justify-center gap-2 shadow-lg hover:shadow-xl"
                 >
@@ -769,6 +901,72 @@ function DemoControls() {
                   className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-all"
                 >
                   Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Clear All Confirmation Modal ── */}
+      {showClearConfirm && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-xl animate-fade-in"></div>
+          
+          <div className="relative glass-card p-0 bg-slate-900/95 shadow-[0_0_50px_-12px_rgba(225,29,72,0.3)] max-w-md w-full rounded-2xl border border-rose-900/40 overflow-hidden animate-slide-up">
+            
+            {/* Header pattern & gradient */}
+            <div className="relative h-28 bg-gradient-to-br from-rose-950 to-slate-950 flex items-center justify-center border-b border-rose-900/50">
+              <div className="absolute inset-0 cyber-grid opacity-20"></div>
+              <div className="absolute -top-10 -right-10 w-32 h-32 bg-rose-600/20 blur-3xl rounded-full"></div>
+              <div className="absolute -bottom-10 -left-10 w-32 h-32 bg-red-600/20 blur-3xl rounded-full"></div>
+              
+              <div className="relative z-10 w-20 h-20 bg-slate-950 border-2 border-rose-500/50 rounded-full flex items-center justify-center shadow-[0_0_25px_rgba(225,29,72,0.4)] mt-16">
+                <Trash2 className="w-9 h-9 text-rose-500 animate-pulse" />
+              </div>
+            </div>
+
+            <div className="p-8 pt-14 text-center relative z-10">
+              <h3 className="text-xl font-black text-white mb-2 tracking-wide uppercase">Wipe Operations System?</h3>
+              <p className="text-sm text-slate-400 mb-8 leading-relaxed">
+                This will permanently erase all active <span className="text-rose-400 font-bold">demo disasters</span> from the tactical grid. The dashboard and monitoring maps will be completely reset.
+              </p>
+              
+              <div className="flex justify-center gap-4">
+                <button
+                  onClick={() => setShowClearConfirm(false)}
+                  className="flex-1 px-5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl transition-all border border-slate-700 hover:border-slate-500 active:scale-95 shadow-sm"
+                >
+                  ABORT
+                </button>
+                <button
+                  onClick={() => {
+                    clearAllDisasters();
+                    setShowClearConfirm(false);
+                    
+                    const notification = document.createElement('div');
+                    notification.className = 'fixed top-24 right-6 z-[100] animate-slide-up';
+                    notification.innerHTML = `
+                      <div class="glass-card p-4 border-l-4 border-l-rose-500 bg-rose-950/80 shadow-2xl shadow-rose-500/20 backdrop-blur-xl max-w-md rounded-xl border border-slate-700">
+                        <div class="flex items-start gap-3">
+                          <div class="text-2xl mt-1">🧹</div>
+                          <div>
+                            <h4 class="text-sm font-bold text-rose-400 mb-1 tracking-wide">SYSTEM CLEARED</h4>
+                            <p class="text-xs text-slate-300">All demo disasters have been wiped.</p>
+                          </div>
+                        </div>
+                      </div>
+                    `;
+                    document.body.appendChild(notification);
+                    setTimeout(() => {
+                      notification.style.opacity = '0';
+                      notification.style.transition = 'opacity 0.5s ease';
+                      setTimeout(() => notification.remove(), 500);
+                    }, 3000);
+                  }}
+                  className="flex-1 px-5 py-3 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-600 text-white font-black uppercase tracking-wider rounded-xl shadow-[0_0_20px_rgba(225,29,72,0.3)] hover:shadow-[0_0_30px_rgba(225,29,72,0.5)] transition-all active:scale-95"
+                >
+                  CONFIRM WIPE
                 </button>
               </div>
             </div>
