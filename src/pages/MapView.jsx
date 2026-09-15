@@ -459,15 +459,24 @@ function MapView() {
 
       const marker = leafletLib.marker([area.lat, area.lng], { icon }).addTo(group);
       marker.bindPopup(`
-        <div style="font-family: Inter, sans-serif; min-width: 200px; background: #1e293b; padding: 12px; border-radius: 8px; border: 2px solid ${color};">
-          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-            <strong style="font-size: 14px; color: #ffffff;">${area.name}</strong>
-            <span style="background: ${color}40; color: #ffffff; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: bold; border: 1px solid ${color};">${area.priority}</span>
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-width: 220px; background: #0f172a; padding: 14px; border-radius: 10px; border: 3px solid ${color}; box-shadow: 0 8px 24px rgba(0,0,0,0.8);">
+          <div style="margin-bottom: 10px;">
+            <div style="font-size: 16px; color: #ffffff; font-weight: 700; margin-bottom: 4px;">${area.name}</div>
+            <span style="display: inline-block; background: ${color}; color: #ffffff; padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 700;">${area.priority}</span>
           </div>
-          <div style="color: #e2e8f0; font-size: 12px; line-height: 1.8;">
-            <div style="margin-bottom: 4px;"><strong style="color: #ffffff;">Risk Level:</strong> <span style="color: ${color}; font-weight: bold; font-size: 14px;">${area.riskPercent}%</span></div>
-            <div style="margin-bottom: 4px;"><strong style="color: #ffffff;">${distLabel}:</strong> <span style="color: #22d3ee;">${area.distanceFromUserKm || 'N/A'} km</span></div>
-            <div><strong style="color: #ffffff;">Population:</strong> <span style="color: #fbbf24;">${area.population ? area.population.toLocaleString() : 'N/A'}</span></div>
+          <div style="font-size: 13px; line-height: 2;">
+            <div style="margin-bottom: 6px;">
+              <span style="color: #94a3b8; font-weight: 600;">Risk Level:</span>
+              <span style="color: #ffffff; font-weight: 700; font-size: 16px; margin-left: 8px;">${area.riskPercent}%</span>
+            </div>
+            <div style="margin-bottom: 6px;">
+              <span style="color: #94a3b8; font-weight: 600;">${distLabel}:</span>
+              <span style="color: #22d3ee; font-weight: 600; margin-left: 8px;">${area.distanceFromUserKm || 'N/A'} km</span>
+            </div>
+            <div>
+              <span style="color: #94a3b8; font-weight: 600;">Population:</span>
+              <span style="color: #fbbf24; font-weight: 600; margin-left: 8px;">${area.population ? area.population.toLocaleString() : 'N/A'}</span>
+            </div>
           </div>
         </div>
       `);
