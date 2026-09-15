@@ -2,17 +2,12 @@ import { useState } from 'react';
 import {
   FileText,
   Printer,
-  Download,
   CheckCircle,
   AlertTriangle,
   Clock,
   Shield,
   Hospital,
   Users,
-  Building2,
-  Calendar,
-  Share2,
-  Waves,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
@@ -23,7 +18,6 @@ export default function IncidentReports() {
     teams,
     hospitals,
     sosBeacons,
-    dams,
     resolveSOSBeacon,
     assignNearestTeamToSOS,
     getStats,
@@ -41,8 +35,8 @@ export default function IncidentReports() {
     0
   ) + 142;
 
-  const totalOccupiedBeds = hospitals.reduce(
-    (sum, h) => sum + (h.totalBeds - h.freeBeds),
+  const totalAmbulances = hospitals.reduce(
+    (sum, h) => sum + (h.ambulances || 0),
     0
   );
 
@@ -121,9 +115,9 @@ export default function IncidentReports() {
           </div>
 
           <div className="p-4 rounded-xl bg-slate-800/40 print:bg-slate-100 border border-slate-700/40 print:border-slate-300">
-            <span className="text-[10px] text-slate-400 print:text-slate-600 uppercase font-semibold">Hospital Occupancy</span>
+            <span className="text-[10px] text-slate-400 print:text-slate-600 uppercase font-semibold">Ambulances Ready</span>
             <p className="text-2xl font-bold text-blue-400 print:text-blue-800 mt-1">
-              {totalOccupiedBeds} Beds
+              {totalAmbulances}
             </p>
             <p className="text-[10px] text-slate-500 print:text-slate-500">Across regional GH network</p>
           </div>
@@ -149,17 +143,35 @@ export default function IncidentReports() {
                     <th className="py-2.5 px-3">Location</th>
                     <th className="py-2.5 px-3">Risk Rating</th>
                     <th className="py-2.5 px-3">Severity</th>
+                    <th className="py-2.5 px-3">Status</th>
+                    <th className="py-2.5 px-3">Assigned Team</th>
+                    <th className="py-2.5 px-3">Nearest Hospital</th>
                     <th className="py-2.5 px-3">Detected At</th>
-                    <th className="py-2.5 px-3">Situation Description</th>
+                    <th className="py-2.5 px-3">Description</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800 print:divide-slate-200">
                   {disasters.map((d) => (
-                    <tr key={d.id} className="text-slate-200 print:text-slate-800">
+                    <tr key={d.id} className={`text-slate-200 print:text-slate-800 ${d.status === 'completed' ? 'opacity-60' : ''}`}>
                       <td className="py-2.5 px-3 font-bold uppercase text-red-400 print:text-red-700">{d.type}</td>
                       <td className="py-2.5 px-3 font-medium">{d.areaName}</td>
                       <td className="py-2.5 px-3 font-bold">{d.riskPercent}%</td>
                       <td className="py-2.5 px-3 capitalize font-semibold">{d.severity}</td>
+                      <td className="py-2.5 px-3">
+                        <span className={`px-2 py-0.5 rounded font-bold text-[10px] uppercase ${
+                          d.status === 'completed'
+                            ? 'bg-emerald-500/20 text-emerald-300 print:text-emerald-800'
+                            : d.status === 'assigned'
+                            ? 'bg-blue-500/20 text-blue-300 print:text-blue-800'
+                            : 'bg-red-500/20 text-red-300 print:text-red-800'
+                        }`}>
+                          {d.status}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 font-semibold text-blue-300 print:text-blue-800">{d.assignedTeamName || '—'}</td>
+                      <td className="py-2.5 px-3 text-green-300 print:text-green-800">
+                        {d.nearestHospitalName ? `${d.nearestHospitalName} (${d.nearestHospitalDistance} km)` : '—'}
+                      </td>
                       <td className="py-2.5 px-3 text-slate-400 print:text-slate-500 font-mono">
                         {new Date(d.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </td>
@@ -268,58 +280,6 @@ export default function IncidentReports() {
                     </td>
                   </tr>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Section 4: Reservoir Inundation & Dam Safety Telemetry */}
-        <div className="mb-6">
-          <h3 className="text-sm font-bold text-slate-300 print:text-slate-900 uppercase tracking-wider mb-3 flex items-center gap-2">
-            <Waves className="h-4 w-4 text-cyan-400 print:text-cyan-800" />
-            Section 4: Reservoir Inundation &amp; Dam Discharge Safety Audit (TN WRD)
-          </h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border border-slate-700/60 print:border-slate-300">
-              <thead className="bg-slate-800/40 print:bg-slate-100">
-                <tr className="border-b border-slate-700 text-slate-400 print:text-slate-600 font-semibold">
-                  <th className="py-2.5 px-3">Reservoir</th>
-                  <th className="py-2.5 px-3">River Basin</th>
-                  <th className="py-2.5 px-3">Current / FRL</th>
-                  <th className="py-2.5 px-3">Storage (TMC)</th>
-                  <th className="py-2.5 px-3">Discharge</th>
-                  <th className="py-2.5 px-3">Safety Status</th>
-                  <th className="py-2.5 px-3">Downstream Flood Watch</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800 print:divide-slate-200">
-                {(dams || []).map((d) => {
-                  const fillPct = ((d.currentLevelFt / d.frlFt) * 100).toFixed(1);
-                  const isHigh = d.status === 'HIGH_ALERT' || d.status === 'CRITICAL_SURGE';
-                  return (
-                    <tr key={d.id} className="text-slate-200 print:text-slate-800">
-                      <td className="py-2.5 px-3 font-semibold">{d.name}</td>
-                      <td className="py-2.5 px-3">{d.river} ({d.district})</td>
-                      <td className="py-2.5 px-3 font-mono">{d.currentLevelFt} / {d.frlFt} ft ({fillPct}%)</td>
-                      <td className="py-2.5 px-3 font-mono">{d.storageTmc} / {d.capacityTmc} TMC</td>
-                      <td className="py-2.5 px-3 font-mono font-bold text-orange-400 print:text-orange-700">
-                        {d.outflowCusecs.toLocaleString()} cusecs
-                      </td>
-                      <td className="py-2.5 px-3">
-                        <span className={`px-2 py-0.5 rounded font-bold text-[10px] uppercase ${
-                          isHigh
-                            ? 'bg-red-500/20 text-red-300 print:text-red-800'
-                            : 'bg-emerald-500/20 text-emerald-300 print:text-emerald-800'
-                        }`}>
-                          {d.status.replace('_', ' ')}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3 text-[11px] text-slate-400 print:text-slate-600">
-                        {d.vulnerableTaluks.slice(0, 2).join(', ')} • Next ETA ~{d.transitSchedule[0]?.peakEta || 'N/A'}
-                      </td>
-                    </tr>
-                  );
-                })}
               </tbody>
             </table>
           </div>

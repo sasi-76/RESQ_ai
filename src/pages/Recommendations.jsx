@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { ClipboardList, CheckCircle2, Circle, AlertCircle, Phone, ChevronDown, ChevronUp, Shield, Ambulance, BedDouble, Zap } from 'lucide-react';
+import { ClipboardList, CheckCircle2, Circle, AlertCircle, Phone, ChevronDown, ChevronUp, Shield, Ambulance, Zap } from 'lucide-react';
 import { recommendations as initialRecs, emergencyContacts } from '../data/mockData';
 import { useApp } from '../context/AppContext';
 
@@ -21,25 +21,30 @@ function Recommendations() {
     hospitals,
     autoDeployTeam,
     dispatchAmbulance,
-    allocateBeds,
     showNotification,
   } = useApp();
 
   const [recs, setRecs] = useState(initialRecs);
   const [expanded, setExpanded] = useState({});
 
-  // Dynamic recommendations generated from live active disasters
+  // Dynamic recommendations generated from live active disasters (not completed)
   const allRecommendations = useMemo(() => {
-    const liveRecs = disasters.map((d) => ({
+    const ongoingDisasters = disasters.filter((d) => d.status !== 'completed');
+    const liveRecs = ongoingDisasters.map((d) => ({
       id: `live-rec-${d.id}`,
-      category: 'Immediate Tactical',
-      priority: 'immediate',
-      action: `Urgent evacuation & defensive barriers for ${d.type.toUpperCase()} in ${d.areaName}`,
-      status: 'pending',
-      details: `Active incident with ${d.riskPercent}% risk detected. Immediate priority: deploy flood barriers/drones, establish field triage at nearest junction, and alert civil defense units.`,
+      category: d.status === 'assigned' ? 'Team Deployed' : 'Immediate Tactical',
+      priority: d.status === 'assigned' ? 'high' : 'immediate',
+      action: d.status === 'assigned'
+        ? `${d.assignedTeamName || 'Team'} responding to ${d.type.toUpperCase()} in ${d.areaName}`
+        : `Urgent evacuation & defensive barriers for ${d.type.toUpperCase()} in ${d.areaName}`,
+      status: d.status === 'assigned' ? 'in-progress' : 'pending',
+      details: d.status === 'assigned'
+        ? `${d.assignedTeamName || 'A team'} has been deployed to ${d.areaName}. Risk level: ${d.riskPercent}%. Mission in progress — monitor field updates.`
+        : `Active incident with ${d.riskPercent}% risk detected. Immediate priority: deploy flood barriers/drones, establish field triage at nearest junction, and alert civil defense units.`,
       isLiveDisaster: true,
       targetArea: d.areaName,
       disasterType: d.type,
+      disasterStatus: d.status,
     }));
 
     return [...liveRecs, ...recs];
@@ -79,12 +84,6 @@ function Recommendations() {
     }
   };
 
-  const handleQuickBeds = () => {
-    const availableHosp = hospitals.find((h) => h.freeBeds > 0);
-    if (availableHosp) {
-      allocateBeds(availableHosp.id, 5);
-    }
-  };
 
   const priorityConfig = {
     immediate: { color: '#ef4444', bg: 'bg-red-500/20', text: 'text-red-400', label: 'IMMEDIATE' },

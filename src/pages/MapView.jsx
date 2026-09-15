@@ -1,6 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import { useEffect, useState, useRef } from 'react';
 import {
   Map,
   MapPin,
@@ -21,13 +19,13 @@ import {
   CloudRain,
   Wind,
   Droplets,
-  Maximize2,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { searchLocations, analyzeLocationRisk } from '../services/locationService';
 import { fetchRealtimeWeather } from '../services/weatherService';
+import { tnDamData } from '../data/damData';
 
-const priorityColors = { P1: '#ef4444', P2: '#f97316', P3: '#eab308', P4: '#22c55e' };
+const priorityColors = { P1: '#ef4444', P2: '#f97316', P3: '#eab308', P4: '#3b82f6' };
 
 const disasterIcons = {
   flood: '🌊',
@@ -41,7 +39,6 @@ function MapView() {
     disasters,
     teams,
     hospitals,
-    dams,
     monitoredAreas: liveAreas,
     userLocation,
     detectUserLocation,
@@ -53,14 +50,16 @@ function MapView() {
     setIsLiveTracking,
     gpsTrackerTelemetry,
     simulateGpsMovement,
+    distanceOrigin,
   } = useApp();
 
-  const [autoFollowGps, setAutoFollowGps] = useState(false);
+  const distLabel = distanceOrigin?.isDisaster ? 'Distance from disaster' : 'Distance from you';
+
+  const [autoFollowGps, setAutoFollowGps] = useState(true);
 
   const [map, setMap] = useState(null);
-  const mapRef = useRef(null);
   const [selectedEntity, setSelectedEntity] = useState(null);
-  const [leafletLib, setLeafletLib] = useState(L);
+  const [leafletLib, setLeafletLib] = useState(null);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -155,87 +154,53 @@ function MapView() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Initialize Leaflet Map with Google Maps-like Hold & Drag behavior
+  // Initialize Leaflet Map
   useEffect(() => {
-    const container = document.getElementById('map-container');
-    if (!container) return;
+    if (typeof window !== 'undefined') {
+      import('leaflet').then((L) => {
+        setLeafletLib(L);
 
-    // Clean up any stale map instance on this element
-    if (mapRef.current) {
-      mapRef.current.remove();
-      mapRef.current = null;
+        const container = L.DomUtil.get('map-container');
+        if (container != null) {
+          container._leaflet_id = null;
+        }
+
+        // Center on South India (Tamil Nadu, Karnataka, Andhra Pradesh)
+        const initialLat = userLocation?.lat || 12.5;
+        const initialLng = userLocation?.lng || 78.0;
+
+        const mapInstance = L.map('map-container').setView([initialLat, initialLng], 7);
+
+        // OpenStreetMap tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '© OpenStreetMap contributors',
+          maxZoom: 19,
+        }).addTo(mapInstance);
+
+        // Pause auto-follow when user drags or zooms the map manually
+        mapInstance.on('movestart', (e) => {
+          if (e.originalEvent) {
+            setAutoFollowGps(false);
+          }
+        });
+
+        // Initialize layer groups
+        layerGroupsRef.current.zones = L.layerGroup().addTo(mapInstance);
+        layerGroupsRef.current.disasters = L.layerGroup().addTo(mapInstance);
+        layerGroupsRef.current.teams = L.layerGroup().addTo(mapInstance);
+        layerGroupsRef.current.hospitals = L.layerGroup().addTo(mapInstance);
+        layerGroupsRef.current.dams = L.layerGroup().addTo(mapInstance);
+        layerGroupsRef.current.userMarker = L.layerGroup().addTo(mapInstance);
+        layerGroupsRef.current.searchMarker = L.layerGroup().addTo(mapInstance);
+
+        setMap(mapInstance);
+      });
     }
-    if (container._leaflet_id) {
-      container._leaflet_id = null;
-    }
-
-    const initialLat = userLocation?.lat || 11.1271;
-    const initialLng = userLocation?.lng || 78.6569;
-
-    const mapInstance = L.map(container, {
-      center: [initialLat, initialLng],
-      zoom: 8,
-      minZoom: 3,
-      maxZoom: 19,
-      dragging: true,
-      tap: false, // Prevents simulated tap from blocking mouse drag on touch laptops & Chromium
-      touchZoom: true,
-      scrollWheelZoom: true,
-      doubleClickZoom: true,
-      boxZoom: true,
-      keyboard: true,
-      inertia: true,
-      inertiaDeceleration: 3000,
-      inertiaMaxSpeed: 2000,
-      easeLinearity: 0.2,
-      worldCopyJump: true,
-    });
-
-    // Explicitly guarantee dragging is active
-    mapInstance.dragging.enable();
-
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors',
-      maxZoom: 19,
-    }).addTo(mapInstance);
-
-    // Pause auto-follow whenever the user drags, moves or zooms the map manually
-    const cancelAutoFollow = () => {
-      setAutoFollowGps(false);
-    };
-
-    mapInstance.on('dragstart', cancelAutoFollow);
-    mapInstance.on('drag', cancelAutoFollow);
-    mapInstance.on('movestart', cancelAutoFollow);
-    mapInstance.on('zoomstart', cancelAutoFollow);
-    mapInstance.on('mousedown', cancelAutoFollow);
-    mapInstance.on('touchstart', cancelAutoFollow);
-
-    // Initialize layer groups
-    layerGroupsRef.current.zones = L.layerGroup().addTo(mapInstance);
-    layerGroupsRef.current.disasters = L.layerGroup().addTo(mapInstance);
-    layerGroupsRef.current.teams = L.layerGroup().addTo(mapInstance);
-    layerGroupsRef.current.hospitals = L.layerGroup().addTo(mapInstance);
-    layerGroupsRef.current.dams = L.layerGroup().addTo(mapInstance);
-    layerGroupsRef.current.userMarker = L.layerGroup().addTo(mapInstance);
-    layerGroupsRef.current.searchMarker = L.layerGroup().addTo(mapInstance);
-
-    mapRef.current = mapInstance;
-    setLeafletLib(L);
-    setMap(mapInstance);
-
-    // Invalidate size once DOM has fully settled to ensure smooth dragging & tile alignment
-    const timer = setTimeout(() => {
-      mapInstance.invalidateSize();
-    }, 200);
 
     return () => {
-      clearTimeout(timer);
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
+      if (map) {
+        map.remove();
       }
-      setMap(null);
     };
   }, []);
 
@@ -249,7 +214,7 @@ function MapView() {
     const lng = userLocation.lng;
     if (!lat || !lng) return;
 
-    // 1. Draw Breadcrumb Trail (past locations while moving) - non-interactive so dragging is never blocked
+    // 1. Draw Breadcrumb Trail (past locations while moving)
     if (gpsTrackerTelemetry?.breadcrumbs?.length > 1) {
       const trailPoints = gpsTrackerTelemetry.breadcrumbs.map((b) => [b.lat, b.lng]);
       leafletLib.polyline(trailPoints, {
@@ -257,11 +222,10 @@ function MapView() {
         weight: 3,
         opacity: 0.75,
         dashArray: '6, 6',
-        interactive: false,
       }).addTo(group);
     }
 
-    // 2. Draw Accuracy Radius Circle - non-interactive so dragging is never blocked
+    // 2. Draw Accuracy Radius Circle
     leafletLib.circle([lat, lng], {
       radius: Math.min(userLocation.accuracy || 25, 2000),
       color: '#06b6d4',
@@ -269,7 +233,6 @@ function MapView() {
       fillOpacity: 0.12,
       weight: 1.5,
       dashArray: '4, 4',
-      interactive: false,
     }).addTo(group);
 
     // 3. Draw Pulsing Radar Beacon
@@ -411,6 +374,60 @@ function MapView() {
     }
   };
 
+  // Update Search Location Marker (from Dashboard or other pages)
+  useEffect(() => {
+    if (!map || !leafletLib || !layerGroupsRef.current.searchMarker) return;
+    const group = layerGroupsRef.current.searchMarker;
+    group.clearLayers();
+
+    if (!selectedSearchLocation || !selectedSearchLocation.lat || !selectedSearchLocation.lng) return;
+
+    const icon = leafletLib.divIcon({
+      className: 'search-target-marker',
+      html: `
+        <div style="
+          width: 32px;
+          height: 32px;
+          background: #dc2626;
+          border: 3px solid white;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: white;
+          box-shadow: 0 0 16px rgba(220, 38, 38, 0.9);
+          font-size: 14px;
+          animation: pulse 1.5s infinite;
+        ">
+          🎯
+        </div>
+      `,
+      iconSize: [32, 32],
+      iconAnchor: [16, 16],
+    });
+
+    leafletLib.marker([selectedSearchLocation.lat, selectedSearchLocation.lng], { icon })
+      .addTo(group)
+      .bindPopup(`
+        <div style="font-family: Inter, sans-serif; min-width: 230px; padding: 2px;">
+          <div style="font-weight: bold; font-size: 13px; color: #dc2626;">🎯 Custom Location</div>
+          <div style="font-weight: 700; font-size: 13px; color: #1e293b; margin: 2px 0;">${selectedSearchLocation.name || 'Search Target'}</div>
+          <div style="font-size: 11px; color: #64748b; margin-bottom: 6px;">
+            Coordinates: ${selectedSearchLocation.lat.toFixed(5)}, ${selectedSearchLocation.lng.toFixed(5)}
+          </div>
+          ${selectedSearchLocation.zone ? `
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px; font-size: 11px; color: #334155;">
+              <div><strong>Zone:</strong> ${selectedSearchLocation.zone.code || 'N/A'}</div>
+              <div><strong>Hazard:</strong> ${selectedSearchLocation.zone.name || 'N/A'}</div>
+            </div>
+          ` : ''}
+        </div>
+      `)
+      .openPopup();
+
+    map.flyTo([selectedSearchLocation.lat, selectedSearchLocation.lng], 13, { duration: 1.5 });
+  }, [map, leafletLib, selectedSearchLocation]);
+
   // Update Monitored Zones Layer
   useEffect(() => {
     if (!map || !leafletLib || !layerGroupsRef.current.zones) return;
@@ -442,15 +459,24 @@ function MapView() {
 
       const marker = leafletLib.marker([area.lat, area.lng], { icon }).addTo(group);
       marker.bindPopup(`
-        <div style="font-family: Inter, sans-serif; min-width: 200px;">
-          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
-            <strong style="font-size: 14px; color: #1e293b;">${area.name}</strong>
-            <span style="background: ${color}25; color: ${color}; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: bold;">${area.priority}</span>
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-width: 220px; background: #0f172a; padding: 14px; border-radius: 10px; border: 3px solid ${color}; box-shadow: 0 8px 24px rgba(0,0,0,0.8);">
+          <div style="margin-bottom: 10px;">
+            <div style="font-size: 16px; color: #ffffff; font-weight: 700; margin-bottom: 4px;">${area.name}</div>
+            <span style="display: inline-block; background: ${color}; color: #ffffff; padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 700;">${area.priority}</span>
           </div>
-          <div style="color: #64748b; font-size: 12px; line-height: 1.5;">
-            <div><strong>Risk Level:</strong> <span style="color: ${color}; font-weight: bold;">${area.riskPercent}%</span></div>
-            <div><strong>Distance from you:</strong> ${area.distanceFromUserKm || 'N/A'} km</div>
-            <div><strong>Population:</strong> ${area.population ? area.population.toLocaleString() : 'N/A'}</div>
+          <div style="font-size: 13px; line-height: 2;">
+            <div style="margin-bottom: 6px;">
+              <span style="color: #94a3b8; font-weight: 600;">Risk Level:</span>
+              <span style="color: #ffffff; font-weight: 700; font-size: 16px; margin-left: 8px;">${area.riskPercent}%</span>
+            </div>
+            <div style="margin-bottom: 6px;">
+              <span style="color: #94a3b8; font-weight: 600;">${distLabel}:</span>
+              <span style="color: #22d3ee; font-weight: 600; margin-left: 8px;">${area.distanceFromUserKm || 'N/A'} km</span>
+            </div>
+            <div>
+              <span style="color: #94a3b8; font-weight: 600;">Population:</span>
+              <span style="color: #fbbf24; font-weight: 600; margin-left: 8px;">${area.population ? area.population.toLocaleString() : 'N/A'}</span>
+            </div>
           </div>
         </div>
       `);
@@ -459,14 +485,12 @@ function MapView() {
         setSelectedEntity({ type: 'area', data: area });
       });
 
-      // Non-interactive circle so users can hold and drag right through it smoothly like Google Maps
       leafletLib.circle([area.lat, area.lng], {
         color,
         fillColor: color,
         fillOpacity: 0.12,
         radius,
         weight: 1.5,
-        interactive: false,
       }).addTo(group);
     });
   }, [map, leafletLib, liveAreas, showZones]);
@@ -479,9 +503,11 @@ function MapView() {
 
     if (!showDisasters) return;
 
-    disasters.forEach((disaster) => {
+    disasters.filter((d) => d.status !== 'completed').forEach((disaster) => {
       const emoji = disasterIcons[disaster.type] || '⚠️';
-      const severityColor = disaster.severity === 'critical' ? '#ef4444' : disaster.severity === 'high' ? '#f97316' : '#eab308';
+      const isAssigned = disaster.status === 'assigned';
+      const severityColor = isAssigned ? '#3b82f6' : disaster.severity === 'critical' ? '#ef4444' : disaster.severity === 'high' ? '#f97316' : '#eab308';
+      const statusLabel = isAssigned ? 'ASSIGNED' : `${disaster.riskPercent}% RISK`;
 
       const icon = leafletLib.divIcon({
         className: 'disaster-marker',
@@ -516,7 +542,7 @@ function MapView() {
               white-space: nowrap;
               text-transform: uppercase;
             ">
-              ${disaster.riskPercent}% RISK
+              ${statusLabel}
             </div>
           </div>
         `,
@@ -524,20 +550,26 @@ function MapView() {
         iconAnchor: [19, 19],
       });
 
+      const teamLine = disaster.assignedTeamName
+        ? `<div style="margin-top:4px;"><strong>Team:</strong> <span style="color:#3b82f6; font-weight:bold;">${disaster.assignedTeamName}</span></div>`
+        : '';
+
       const marker = leafletLib.marker([disaster.lat, disaster.lng], { icon }).addTo(group);
       marker.bindPopup(`
-        <div style="font-family: Inter, sans-serif; min-width: 220px;">
-          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
-            <span style="font-size: 20px;">${emoji}</span>
+        <div style="font-family: Inter, sans-serif; min-width: 220px; background: #1e293b; padding: 12px; border-radius: 8px; border: 2px solid #ef4444;">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+            <span style="font-size: 24px;">${emoji}</span>
             <div>
-              <strong style="font-size: 14px; color: #dc2626; text-transform: uppercase;">${disaster.type} ALARM</strong>
-              <div style="font-size: 11px; color: #64748b;">${disaster.areaName}</div>
+              <strong style="font-size: 15px; color: #ef4444; text-transform: uppercase; display: block;">${disaster.type} ALARM</strong>
+              <div style="font-size: 11px; color: #94a3b8;">${disaster.areaName}</div>
             </div>
           </div>
-          <p style="font-size: 12px; color: #334155; margin: 4px 0 6px;">${disaster.description}</p>
-          <div style="background: #f8fafc; padding: 6px; border-radius: 6px; font-size: 11px; color: #475569;">
-            <div><strong>Severity:</strong> <span style="color:${severityColor}; font-weight: bold; text-transform: capitalize;">${disaster.severity}</span></div>
-            <div><strong>Risk Rating:</strong> <strong>${disaster.riskPercent}%</strong></div>
+          <p style="font-size: 12px; color: #e2e8f0; margin: 4px 0 8px;">${disaster.description}</p>
+          <div style="background: #0f172a; padding: 8px; border-radius: 6px; font-size: 12px; color: #e2e8f0; line-height: 1.8;">
+            <div style="margin-bottom: 4px;"><strong style="color: #ffffff;">Status:</strong> <span style="color:${severityColor}; font-weight: bold; text-transform: uppercase;">${disaster.status}</span></div>
+            <div style="margin-bottom: 4px;"><strong style="color: #ffffff;">Severity:</strong> <span style="color:${severityColor}; font-weight: bold; text-transform: capitalize; font-size: 13px;">${disaster.severity}</span></div>
+            <div style="margin-bottom: 4px;"><strong style="color: #ffffff;">Risk Rating:</strong> <span style="color: #fbbf24; font-weight: bold;">${disaster.riskPercent}%</span></div>
+            ${teamLine}
           </div>
         </div>
       `);
@@ -546,7 +578,6 @@ function MapView() {
         setSelectedEntity({ type: 'disaster', data: disaster });
       });
 
-      // Non-interactive hazard radius circle so map can be dragged smoothly
       leafletLib.circle([disaster.lat, disaster.lng], {
         color: severityColor,
         fillColor: severityColor,
@@ -554,7 +585,6 @@ function MapView() {
         radius: 12000,
         weight: 2,
         dashArray: '4, 4',
-        interactive: false,
       }).addTo(group);
     });
   }, [map, leafletLib, disasters, showDisasters]);
@@ -598,17 +628,17 @@ function MapView() {
 
       const marker = leafletLib.marker([lat, lng], { icon }).addTo(group);
       marker.bindPopup(`
-        <div style="font-family: Inter, sans-serif; min-width: 200px;">
-          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
-            <span style="font-size: 18px;">🚁</span>
+        <div style="font-family: Inter, sans-serif; min-width: 200px; background: #1e293b; padding: 12px; border-radius: 8px; border: 2px solid #8b5cf6;">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+            <span style="font-size: 20px;">🚁</span>
             <div>
-              <strong style="font-size: 13px; color: #7e22ce;">${team.name}</strong>
-              <div style="font-size: 10px; color: #64748b;">${team.members} Officers Deployed</div>
+              <strong style="font-size: 14px; color: #8b5cf6; display: block;">${team.name}</strong>
+              <div style="font-size: 11px; color: #94a3b8;">${team.members} Officers Deployed</div>
             </div>
           </div>
-          <div style="font-size: 12px; color: #334155;">
-            <div><strong>Assigned Sector:</strong> ${team.location || team.assignedArea}</div>
-            <div><strong>Operation:</strong> ${team.mission}</div>
+          <div style="font-size: 12px; color: #e2e8f0; line-height: 1.8;">
+            <div style="margin-bottom: 4px;"><strong style="color: #ffffff;">Assigned Sector:</strong> <span style="color: #22d3ee;">${team.location || team.assignedArea}</span></div>
+            <div><strong style="color: #ffffff;">Operation:</strong> <span style="color: #fbbf24;">${team.mission}</span></div>
           </div>
         </div>
       `);
@@ -656,13 +686,13 @@ function MapView() {
 
       const marker = leafletLib.marker([hosp.lat, hosp.lng], { icon }).addTo(group);
       marker.bindPopup(`
-        <div style="font-family: Inter, sans-serif; min-width: 210px;">
-          <strong style="font-size: 13px; color: #065f46;">🏥 ${hosp.name}</strong>
-          <div style="color: #64748b; font-size: 11px; margin-top: 5px; line-height: 1.6;">
-            <div><strong>Distance from you:</strong> <span style="color: #059669; font-weight: bold;">${hosp.distance} km</span></div>
-            <div><strong>Transit Time:</strong> <span>${hosp.transitEta || '15 mins'}</span></div>
-            <div><strong>Ambulance Units:</strong> ${hosp.ambulances} Ready</div>
-            <div><strong>Emergency Care:</strong> ${hosp.emergency ? '24/7 Trauma Service' : 'General'}</div>
+        <div style="font-family: Inter, sans-serif; min-width: 210px; background: #1e293b; padding: 12px; border-radius: 8px; border: 2px solid #10b981;">
+          <strong style="font-size: 14px; color: #ffffff; display: block; margin-bottom: 8px;">🏥 ${hosp.name}</strong>
+          <div style="color: #e2e8f0; font-size: 12px; line-height: 1.8;">
+            <div style="margin-bottom: 4px;"><strong style="color: #ffffff;">${distLabel}:</strong> <span style="color: #10b981; font-weight: bold;">${hosp.distance} km</span></div>
+            <div style="margin-bottom: 4px;"><strong style="color: #ffffff;">Transit Time:</strong> <span style="color: #22d3ee;">${hosp.transitEta || '15 mins'}</span></div>
+            <div style="margin-bottom: 4px;"><strong style="color: #ffffff;">Ambulance Units:</strong> <span style="color: #fbbf24;">${hosp.ambulances} Ready</span></div>
+            <div><strong style="color: #ffffff;">Emergency Care:</strong> <span style="color: ${hosp.emergency ? '#10b981' : '#94a3b8'};">${hosp.emergency ? '24/7 Trauma Service' : 'General'}</span></div>
           </div>
         </div>
       `);
@@ -673,157 +703,86 @@ function MapView() {
     });
   }, [map, leafletLib, hospitals, showHospitals]);
 
-  // Update Dams & Reservoirs Layer
+  // Update Dams Layer
   useEffect(() => {
     if (!map || !leafletLib || !layerGroupsRef.current.dams) return;
     const group = layerGroupsRef.current.dams;
     group.clearLayers();
 
-    if (!showDams || !dams?.length) return;
+    if (!showDams) return;
 
-    dams.forEach((dam) => {
-      const fillPct = ((dam.currentLevelFt / dam.frlFt) * 100).toFixed(1);
-      const isCritical = dam.status === 'CRITICAL_SURGE';
-      const isHighAlert = dam.status === 'HIGH_ALERT';
-      const damColor = isCritical ? '#ef4444' : isHighAlert ? '#f97316' : '#06b6d4';
+    // Get dam data from localStorage or fallback to tnDamData
+    let damsData = [];
+    try {
+      const cached = localStorage.getItem('resqai_dams_real_v2');
+      if (cached) {
+        damsData = JSON.parse(cached);
+      } else {
+        damsData = tnDamData;
+      }
+    } catch (e) {
+      damsData = tnDamData;
+    }
+
+    damsData.forEach((dam) => {
+      const fillPct = ((dam.currentLevel / dam.fullReservoirLevel) * 100);
+      const color = fillPct >= 75 ? '#ef4444' : fillPct >= 50 ? '#eab308' : '#06b6d4';
 
       const icon = leafletLib.divIcon({
         className: 'dam-marker',
         html: `
-          <div style="position: relative; display: flex; flex-direction: column; align-items: center;">
-            <div style="
-              width: 38px;
-              height: 38px;
-              background: #0f172a;
-              border: 3px solid ${damColor};
-              border-radius: 50%;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              font-size: 16px;
-              box-shadow: 0 0 16px ${damColor}80, 0 4px 12px rgba(0,0,0,0.6);
-              animation: ${isCritical ? 'pulse 1.2s infinite' : 'none'};
-            ">
-              🌊
-            </div>
-            <div style="
-              margin-top: 2px;
-              background: #090d16;
-              border: 1px solid ${damColor}90;
-              color: #f8fafc;
-              font-family: Inter, sans-serif;
-              font-size: 9px;
-              font-weight: 800;
-              padding: 1px 5px;
-              border-radius: 4px;
-              white-space: nowrap;
-              box-shadow: 0 2px 6px rgba(0,0,0,0.5);
-              display: flex;
-              align-items: center;
-              gap: 3px;
-            ">
-              <span style="color:${damColor}; font-weight:900;">${fillPct}%</span>
-              <span>${dam.shortName}</span>
-            </div>
+          <div style="
+            width: 32px;
+            height: 32px;
+            background: #0f172a;
+            border: 2px solid ${color};
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: ${color};
+            box-shadow: 0 0 12px ${color}40;
+            font-size: 16px;
+            font-weight: bold;
+          ">
+            💧
           </div>
         `,
-        iconSize: [60, 48],
-        iconAnchor: [30, 24],
+        iconSize: [32, 32],
+        iconAnchor: [16, 16],
       });
 
-      const marker = leafletLib.marker([dam.lat, dam.lng], { icon }).addTo(group);
-
+      const marker = leafletLib.marker([dam.latitude, dam.longitude], { icon }).addTo(group);
       marker.bindPopup(`
-        <div style="font-family: Inter, sans-serif; min-width: 250px; padding: 2px;">
-          <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #334155; padding-bottom: 6px; margin-bottom: 6px;">
-            <div>
-              <span style="font-size: 10px; font-weight: 800; color: #06b6d4; text-transform: uppercase;">🌊 State Reservoir</span>
-              <div style="font-weight: 800; font-size: 14px; color: #0f172a;">${dam.name}</div>
-            </div>
-            <span style="background: ${damColor}20; color: ${damColor}; border: 1px solid ${damColor}40; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 800;">
-              ${dam.status.replace('_', ' ')}
-            </span>
+        <div style="font-family: Inter, sans-serif; min-width: 220px; background: #1e293b; padding: 12px; border-radius: 8px; border: 2px solid ${color};">
+          <strong style="font-size: 14px; color: #ffffff; display: block; margin-bottom: 8px;">💧 ${dam.name}</strong>
+          <div style="color: #e2e8f0; font-size: 12px; line-height: 1.8;">
+            <div style="margin-bottom: 4px;"><strong style="color: #ffffff;">River:</strong> <span style="color: #22d3ee;">${dam.river}</span></div>
+            <div style="margin-bottom: 4px;"><strong style="color: #ffffff;">Current Level:</strong> <span style="color: ${color}; font-weight: bold;">${dam.currentLevel} ft</span></div>
+            <div style="margin-bottom: 4px;"><strong style="color: #ffffff;">Full Level:</strong> <span style="color: #94a3b8;">${dam.fullReservoirLevel} ft</span></div>
+            <div style="margin-bottom: 4px;"><strong style="color: #ffffff;">Fill:</strong> <span style="color: ${color}; font-weight: bold; font-size: 14px;">${fillPct.toFixed(1)}%</span></div>
+            <div><strong style="color: #ffffff;">Status:</strong> ${fillPct >= 75 ? '<span style="color: #ef4444;">🔴 High</span>' : fillPct >= 50 ? '<span style="color: #eab308;">🟡 Normal</span>' : '<span style="color: #06b6d4;">🔵 Low</span>'}</div>
           </div>
-
-          <div style="font-size: 11px; color: #475569; line-height: 1.6; margin-bottom: 6px;">
-            <div><strong>River Basin:</strong> ${dam.river} (${dam.basin})</div>
-            <div><strong>Water Level:</strong> <span style="color: #0284c7; font-weight: bold;">${dam.currentLevelFt} ft</span> / ${dam.frlFt} ft FRL (<strong>${fillPct}% Full</strong>)</div>
-            <div><strong>Live Storage:</strong> <strong>${dam.storageTmc} TMC</strong> / ${dam.capacityTmc} TMC</div>
-            <div><strong>Spillway Discharge:</strong> <span style="color: #ea580c; font-weight: bold;">${dam.outflowCusecs.toLocaleString()} cusecs</span> (Inflow: ${dam.inflowCusecs.toLocaleString()})</div>
-            <div><strong>Sluice Gates:</strong> ${dam.openGates} of ${dam.spillwayGates} open</div>
-          </div>
-
-          ${
-            dam.transitSchedule?.length
-              ? `
-            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px; font-size: 10px; color: #334155; margin-top: 4px;">
-              <div style="font-weight: bold; color: #c2410c; margin-bottom: 2px;">⏱️ Flood Wave ETA:</div>
-              ${dam.transitSchedule
-                .slice(0, 2)
-                .map((t) => `<div>• <strong>${t.location}:</strong> ~${t.peakEta} (${t.distanceKm} km)</div>`)
-                .join('')}
-            </div>
-          `
-              : ''
-          }
         </div>
       `);
 
       marker.on('click', () => {
-        setSelectedEntity({ type: 'dam', data: dam });
+        setSelectedEntity({ type: 'dam', data: { ...dam, lat: dam.latitude, lng: dam.longitude } });
       });
-
-      // Buffer circle around dam (non-interactive so map dragging is completely unobstructed)
-      leafletLib.circle([dam.lat, dam.lng], {
-        color: damColor,
-        fillColor: damColor,
-        fillOpacity: isCritical ? 0.2 : 0.1,
-        radius: 8000,
-        weight: 1.5,
-        dashArray: '4, 4',
-        interactive: false,
-      }).addTo(group);
     });
-  }, [map, leafletLib, dams, showDams]);
-
-  // View All Monitored Areas & Sectors
-  const handleFitAllAreas = () => {
-    setAutoFollowGps(false);
-    if (!map) return;
-    const allCoords = [];
-    if (liveAreas?.length) {
-      liveAreas.forEach((a) => {
-        if (a.lat && a.lng) allCoords.push([a.lat, a.lng]);
-      });
-    }
-    if (disasters?.length) {
-      disasters.forEach((d) => {
-        if (d.lat && d.lng) allCoords.push([d.lat, d.lng]);
-      });
-    }
-    if (dams?.length) {
-      dams.forEach((dm) => {
-        if (dm.lat && dm.lng) allCoords.push([dm.lat, dm.lng]);
-      });
-    }
-    if (allCoords.length > 0) {
-      map.fitBounds(allCoords, { padding: [50, 50], maxZoom: 11, duration: 1.2 });
-    } else {
-      map.flyTo([11.05, 78.65], 7, { duration: 1.2 });
-    }
-  };
+  }, [map, leafletLib, showDams]);
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
+      {/* Header & Global Location Search Bar */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
-            <Map className="h-6 w-6 text-blue-500" />
-            Interactive Area Command &amp; GIS
-          </h1>
-          <p className="text-slate-400 text-xs mt-1">
-            Hold and drag anywhere to explore all areas. Real-time GIS monitoring for Tamil Nadu disaster sectors.
+          <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+            <Map className="h-7 w-7 text-blue-400" />
+            Tactical GIS & Proximity Analyzer
+          </h2>
+          <p className="text-sm text-slate-400 mt-1">
+            Real-Time GPS Location Tracking, Global Geocoding & Emergency Reach Analysis
           </p>
         </div>
 
@@ -952,7 +911,7 @@ function MapView() {
                 : 'text-slate-500 hover:text-slate-300'
             }`}
           >
-            🌊 Dams ({dams?.length || 0})
+            💧 Dams (18)
           </button>
 
           <button
@@ -998,18 +957,9 @@ function MapView() {
       {/* ── STATEWIDE TAMIL NADU & REGIONAL QUICK NAVIGATION TOOLBAR ────────── */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs scrollbar-none">
         <span className="text-slate-400 font-bold font-mono text-[11px] whitespace-nowrap flex items-center gap-1">
-          <Navigation className="h-3 w-3 text-cyan-400" /> Navigation:
+          <Navigation className="h-3 w-3 text-cyan-400" /> Statewide Quick Jump:
         </span>
         
-        <button
-          onClick={handleFitAllAreas}
-          className="px-3 py-1.5 rounded-lg bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-200 hover:text-white border border-cyan-500/50 font-bold flex items-center gap-1.5 whitespace-nowrap shadow-sm transition-all"
-          title="Zoom out and fit all monitored disaster zones on screen"
-        >
-          <Maximize2 className="h-3.5 w-3.5 text-cyan-300" />
-          <span>🌐 See All Areas</span>
-        </button>
-
         <button
           onClick={() => {
             setAutoFollowGps(false);
@@ -1155,7 +1105,7 @@ function MapView() {
           <div
             id="map-container"
             className="w-full h-[550px] rounded-xl overflow-hidden border-2 border-slate-700/50 relative"
-            style={{ zIndex: 1 }}
+            style={{ zIndex: 10, touchAction: 'pan-x pan-y' }}
           />
 
           {/* Legend */}
@@ -1173,8 +1123,8 @@ function MapView() {
               <span>Medical Facility</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <div className="w-3 h-3 rounded-full bg-cyan-500 border border-white" />
-              <span>State Reservoir / Dam</span>
+              <div className="w-3 h-3 rounded-md bg-cyan-500 border border-white" />
+              <span>Reservoir / Dam</span>
             </div>
             <div className="flex items-center gap-1.5">
               <div className="w-3 h-3 rounded-md bg-purple-600 border border-white" />
@@ -1364,38 +1314,47 @@ function MapView() {
           )}
 
           {/* Active Disasters Quick Ticker */}
-          {disasters.length > 0 && (
+          {disasters.filter((d) => d.status !== 'completed').length > 0 && (
             <div className="glass-card p-5 border-l-4 border-l-red-500 bg-red-500/10">
               <div className="flex items-center justify-between mb-2">
                 <h4 className="text-sm font-bold text-white flex items-center gap-2">
                   <ShieldAlert className="h-4 w-4 text-red-400" />
-                  Active Incident Markers ({disasters.length})
+                  Active Incident Markers ({disasters.filter((d) => d.status !== 'completed').length})
                 </h4>
                 <span className="text-[10px] bg-red-500 text-white font-bold px-2 py-0.5 rounded-full uppercase">
                   Alert
                 </span>
               </div>
               <div className="space-y-2 max-h-32 overflow-y-auto">
-                {disasters.map((d) => (
-                  <div
-                    key={d.id}
-                    onClick={() => {
-                      setAutoFollowGps(false);
-                      setSelectedEntity({ type: 'disaster', data: d });
-                      if (map) map.flyTo([d.lat, d.lng], 12);
-                    }}
-                    className="flex items-center justify-between p-2 rounded-lg bg-slate-900/60 border border-red-500/20 hover:border-red-500 cursor-pointer transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">{disasterIcons[d.type] || '⚠️'}</span>
-                      <div>
-                        <p className="text-xs font-semibold text-white">{d.areaName}</p>
-                        <p className="text-[10px] text-slate-400 capitalize">{d.type} · Severity: {d.severity}</p>
+                {disasters.filter((d) => d.status !== 'completed').map((d) => {
+                  const statusColor = d.status === 'assigned' ? 'text-blue-400' : 'text-red-400';
+                  const borderColor = d.status === 'assigned' ? 'border-blue-500/20 hover:border-blue-500' : 'border-red-500/20 hover:border-red-500';
+                  return (
+                    <div
+                      key={d.id}
+                      onClick={() => {
+                        setAutoFollowGps(false);
+                        setSelectedEntity({ type: 'disaster', data: d });
+                        if (map) map.flyTo([d.lat, d.lng], 12);
+                      }}
+                      className={`flex items-center justify-between p-2 rounded-lg bg-slate-900/60 border ${borderColor} cursor-pointer transition-colors`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">{disasterIcons[d.type] || '⚠️'}</span>
+                        <div>
+                          <p className="text-xs font-semibold text-white">{d.areaName}</p>
+                          <p className="text-[10px] text-slate-400 capitalize">
+                            {d.type} · {d.status === 'assigned' ? `Team: ${d.assignedTeamName}` : `Severity: ${d.severity}`}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className={`text-xs font-bold ${statusColor}`}>{d.riskPercent}%</span>
+                        <p className={`text-[10px] font-bold uppercase ${statusColor}`}>{d.status}</p>
                       </div>
                     </div>
-                    <span className="text-xs font-bold text-red-400">{d.riskPercent}% Risk</span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -1421,7 +1380,7 @@ function MapView() {
                     🏥 {selectedEntity.data.name}
                   </h4>
                   <div className="grid grid-cols-2 gap-2 pt-2 text-slate-400">
-                    <div>Distance: <strong className="text-emerald-400">{selectedEntity.data.distance} km</strong></div>
+                    <div>{distanceOrigin?.isDisaster ? 'From disaster' : 'Distance'}: <strong className="text-emerald-400">{selectedEntity.data.distance} km</strong></div>
                     <div>Transit ETA: <strong className="text-white">{selectedEntity.data.transitEta || '15 mins'}</strong></div>
                     <div>Ambulances: <strong className="text-white">{selectedEntity.data.ambulances} Available</strong></div>
                     <div>Services: <strong className="text-white">{selectedEntity.data.emergency ? '24/7 Trauma' : 'General'}</strong></div>
@@ -1447,15 +1406,21 @@ function MapView() {
                   </h4>
                   <p className="text-slate-300">{selectedEntity.data.description}</p>
                   <div className="grid grid-cols-2 gap-2 pt-2 text-slate-400">
-                    <div>Severity: <strong className="text-red-400 capitalize">{selectedEntity.data.severity}</strong></div>
+                    <div>Status: <strong className={`capitalize ${selectedEntity.data.status === 'assigned' ? 'text-blue-400' : selectedEntity.data.status === 'completed' ? 'text-emerald-400' : 'text-red-400'}`}>{selectedEntity.data.status}</strong></div>
                     <div>Risk: <strong className="text-red-400">{selectedEntity.data.riskPercent}%</strong></div>
+                    <div>Severity: <strong className="text-red-400 capitalize">{selectedEntity.data.severity}</strong></div>
+                    {selectedEntity.data.assignedTeamName && (
+                      <div>Team: <strong className="text-blue-400">{selectedEntity.data.assignedTeamName}</strong></div>
+                    )}
                   </div>
-                  <button
-                    onClick={() => autoDeployTeam(selectedEntity.data.areaName, selectedEntity.data.type)}
-                    className="w-full mt-2 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-blue-600 text-white font-semibold text-xs"
-                  >
-                    🚁 Dispatch Response Squad
-                  </button>
+                  {selectedEntity.data.status === 'active' && (
+                    <button
+                      onClick={() => autoDeployTeam(selectedEntity.data.areaName, selectedEntity.data.type)}
+                      className="w-full mt-2 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-blue-600 text-white font-semibold text-xs"
+                    >
+                      🚁 Dispatch Response Squad
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -1465,7 +1430,7 @@ function MapView() {
                   <div className="grid grid-cols-2 gap-2 pt-2 text-slate-400">
                     <div>Priority: <strong style={{ color: priorityColors[selectedEntity.data.priority] }}>{selectedEntity.data.priority}</strong></div>
                     <div>Risk Level: <strong className="text-white">{selectedEntity.data.riskPercent}%</strong></div>
-                    <div>Distance: <strong className="text-emerald-400">{selectedEntity.data.distanceFromUserKm || 'N/A'} km</strong></div>
+                    <div>{distanceOrigin?.isDisaster ? 'From disaster' : 'Distance'}: <strong className="text-emerald-400">{selectedEntity.data.distanceFromUserKm || 'N/A'} km</strong></div>
                   </div>
                 </div>
               )}
@@ -1606,7 +1571,7 @@ function MapView() {
                     <MapPin className="h-4 w-4 shrink-0" style={{ color: priorityColors[area.priority] || '#3b82f6' }} />
                     <div>
                       <p className="text-xs font-semibold text-white">{area.name}</p>
-                      <p className="text-[10px] text-slate-400">Distance: {area.distanceFromUserKm || 'N/A'} km</p>
+                      <p className="text-[10px] text-slate-400">{distanceOrigin?.isDisaster ? 'From disaster' : 'Distance'}: {area.distanceFromUserKm || 'N/A'} km</p>
                     </div>
                   </div>
                   <div className="text-right">

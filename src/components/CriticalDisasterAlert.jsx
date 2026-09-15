@@ -2,10 +2,9 @@ import { useEffect } from "react";
 import { X, Siren, Zap, AlertTriangle, Shield, Users } from "lucide-react";
 import { useApp } from "../context/AppContext";
 
-const EMERGENCY_PHONE = import.meta.env.VITE_EMERGENCY_PHONE || "919876543210";
-const COMMANDER_PHONE = EMERGENCY_PHONE;
-const CITIZEN_PHONE   = EMERGENCY_PHONE;
-const SMS_PHONE       = EMERGENCY_PHONE.replace(/^91/, "");
+const COMMANDER_PHONE = "919843279397";
+const CITIZEN_PHONE   = "919843279397";
+const SMS_PHONE       = "9843279397";
 
 // ── Commander message (tactical) ─────────────────────────────────────────────
 function commanderWhatsApp(d) {

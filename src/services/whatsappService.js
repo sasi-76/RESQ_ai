@@ -8,7 +8,7 @@
  */
 
 const COMMAND_HQ = "RESQ-EOC-TN";
-const FALLBACK_PHONE = import.meta.env.VITE_EMERGENCY_PHONE || "919876543210";
+const FALLBACK_PHONE = "919843279397"; // used when team.phone not yet in localStorage cache
 
 // Build a wa.me URL for a given phone + message
 export function buildWhatsAppUrl(phone, message) {

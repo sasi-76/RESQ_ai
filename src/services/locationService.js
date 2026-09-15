@@ -234,6 +234,49 @@ export async function searchLocations(query) {
 
   const q = query.trim().toLowerCase();
 
+  // Check if input is coordinate format: "12.8681, 80.2166" or "12.8681 80.2166"
+  const coordPattern = /^(-?\d+\.?\d*)[,\s]+(-?\d+\.?\d*)$/;
+  const coordMatch = query.trim().match(coordPattern);
+
+  if (coordMatch) {
+    const lat = parseFloat(coordMatch[1]);
+    const lng = parseFloat(coordMatch[2]);
+
+    // Validate coordinate ranges (India roughly: lat 8-35, lng 68-97)
+    if (lat >= 6 && lat <= 38 && lng >= 65 && lng <= 100) {
+      try {
+        const geocoded = await reverseGeocodeCoordinates(lat, lng, 5, `Custom Location`);
+        return [{
+          id: `coord-${lat}-${lng}`,
+          name: geocoded.name || `GPS (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
+          specificArea: geocoded.specificArea || 'Custom Coordinates',
+          city: geocoded.city || '',
+          district: geocoded.district || '',
+          state: geocoded.state || 'Tamil Nadu',
+          subtitle: `Custom Coordinates • ${geocoded.zone?.name || 'Manual Entry'}`,
+          lat,
+          lng,
+          type: 'Custom Coordinates',
+          zone: geocoded.zone,
+        }];
+      } catch (e) {
+        // Fallback if reverse geocoding fails
+        return [{
+          id: `coord-${lat}-${lng}`,
+          name: `GPS (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
+          specificArea: 'Custom Coordinates',
+          city: '',
+          district: '',
+          state: 'Tamil Nadu',
+          subtitle: 'Custom Coordinates • Manual Entry',
+          lat,
+          lng,
+          type: 'Custom Coordinates',
+        }];
+      }
+    }
+  }
+
   // 1. Instant local matching for Tamil Nadu districts and key sectors
   const localHubs = [
     { name: 'Madurai City Center', city: 'Madurai', district: 'Madurai', state: 'Tamil Nadu', lat: 9.9252, lng: 78.1198, type: 'District Headquarters' },

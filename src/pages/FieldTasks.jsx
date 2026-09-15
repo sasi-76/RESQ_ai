@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   CheckCircle2,
   Clock,
@@ -21,6 +22,7 @@ import {
   HeartPulse,
   Activity,
   Layers,
+  Award,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
@@ -49,15 +51,43 @@ const priorityStyles = {
 };
 
 export default function FieldTasks() {
-  const { tasks, updateTaskStatus, completeTask, getTaskStats } = useApp();
+  const location = useLocation();
+  const { tasks, updateTaskStatus, completeTask, getTaskStats, teams, completedMissions, completeMission } = useApp();
   const stats = getTaskStats();
 
+  const [activeTab, setActiveTab] = useState(() =>
+    location.pathname.includes('/missions') ? 'missions' : 'tasks'
+  );
   const [statusFilter, setStatusFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeModalTask, setActiveModalTask] = useState(null);
   const [responderName, setResponderName] = useState('');
   const [completionNotes, setCompletionNotes] = useState('');
+
+  // Mission state
+  const [selectedTeam, setSelectedTeam] = useState(null);
+  const [missionReport, setMissionReport] = useState('');
+
+  const deployedTeams = teams.filter(t => t.status === 'deployed');
+
+  const getMissionDuration = (deployedAt) => {
+    if (!deployedAt) return 'N/A';
+    const duration = Date.now() - new Date(deployedAt).getTime();
+    const hours = Math.floor(duration / (1000 * 60 * 60));
+    const minutes = Math.floor((duration % (1000 * 60 * 60)) / (1000 * 60));
+    return `${hours}h ${minutes}m`;
+  };
+
+  const handleSubmitMissionCompletion = () => {
+    if (!selectedTeam || !missionReport.trim()) {
+      alert('Please provide a mission completion report');
+      return;
+    }
+    completeMission(selectedTeam.id, missionReport.trim());
+    setMissionReport('');
+    setSelectedTeam(null);
+  };
 
   // Filter tasks
   const filteredTasks = tasks.filter((t) => {
@@ -112,49 +142,51 @@ export default function FieldTasks() {
               </span>
               Live Field Synchronization
             </span>
-            <span className="text-xs text-slate-400">Direct Dashboard Link</span>
           </div>
           <h1 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2.5">
             <CheckSquare className="h-7 w-7 text-emerald-400" />
-            Field Operations & Task Completion
+            Field Operations & Missions
           </h1>
           <p className="text-sm text-slate-400 mt-1">
-            Assigned missions for response teams. Marking tasks completed immediately reflects across command centers and the main Dashboard.
+            Manage field tasks and track active missions
           </p>
         </div>
 
-        {/* Global Task Completion Pill */}
-        <div className="flex items-center gap-3 bg-slate-800/80 border border-slate-700/60 rounded-xl px-4 py-2.5 shadow-lg">
-          <div className="text-right">
-            <p className="text-xs text-slate-400 font-medium">Overall Progress</p>
-            <p className="text-lg font-bold text-emerald-400">{stats.percentCompleted}% Completed</p>
-          </div>
-          <div className="w-12 h-12 rounded-full border-4 border-slate-700 flex items-center justify-center relative">
-            <svg className="w-12 h-12 transform -rotate-90">
-              <circle
-                cx="24"
-                cy="24"
-                r="18"
-                stroke="currentColor"
-                strokeWidth="4"
-                className="text-slate-700"
-                fill="transparent"
-              />
-              <circle
-                cx="24"
-                cy="24"
-                r="18"
-                stroke="currentColor"
-                strokeWidth="4"
-                strokeDasharray={113}
-                strokeDashoffset={113 - (113 * stats.percentCompleted) / 100}
-                className="text-emerald-500 transition-all duration-700"
-                fill="transparent"
-                strokeLinecap="round"
-              />
-            </svg>
-            <span className="absolute text-[11px] font-bold text-white">{stats.percentCompleted}%</span>
-          </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-2 border-b border-slate-700">
+        <button
+          onClick={() => setActiveTab('tasks')}
+          className={`px-4 py-2 font-medium text-sm transition-all ${
+            activeTab === 'tasks'
+              ? 'border-b-2 border-cyan-500 text-cyan-400'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <CheckSquare className="inline h-4 w-4 mr-1.5" />
+          Field Tasks
+        </button>
+        <button
+          onClick={() => setActiveTab('missions')}
+          className={`px-4 py-2 font-medium text-sm transition-all ${
+            activeTab === 'missions'
+              ? 'border-b-2 border-cyan-500 text-cyan-400'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <Award className="inline h-4 w-4 mr-1.5" />
+          Missions ({deployedTeams.length})
+        </button>
+      </div>
+
+      {activeTab === 'tasks' && (
+        <>
+      {/* Task Stats */}
+      <div className="flex items-center gap-3 bg-slate-800/80 border border-slate-700/60 rounded-xl px-4 py-2.5">
+        <div className="text-right">
+          <p className="text-xs text-slate-400 font-medium">Task Progress</p>
+          <p className="text-lg font-bold text-emerald-400">{stats.completionRate}% Complete</p>
         </div>
       </div>
 
@@ -271,6 +303,18 @@ export default function FieldTasks() {
             const catColors = categoryColorMap[task.category] || 'text-slate-400 bg-slate-700/20';
             const isCompleted = task.status === 'completed';
             const isInProgress = task.status === 'in-progress';
+            const isAiAnalyzing = task.aiAnalyzing;
+
+            if (isAiAnalyzing) {
+              return (
+                <div key={task.id} className="glass-card p-5 rounded-xl border border-purple-500/40 bg-purple-950/10 animate-pulse flex flex-col items-center justify-center text-center py-10">
+                  <Activity className="h-8 w-8 text-purple-400 animate-spin mb-3" />
+                  <h3 className="text-base font-bold text-white mb-1">AI Task Engine Generating...</h3>
+                  <p className="text-xs text-purple-300">Creating detailed field tasks for {task.location}</p>
+                  <p className="text-[10px] text-slate-500 mt-2">Analyzing decision, teams, and area data via LLM</p>
+                </div>
+              );
+            }
 
             return (
               <div
@@ -297,6 +341,12 @@ export default function FieldTasks() {
                         <CatIcon className="h-3 w-3" />
                         {task.category}
                       </span>
+                      {task.aiGenerated && (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold border bg-purple-500/10 text-purple-400 border-purple-500/20 flex items-center gap-1">
+                          <Sparkles className="h-3 w-3" />
+                          AI Generated
+                        </span>
+                      )}
                     </div>
 
                     {/* Status Badge */}
@@ -350,10 +400,34 @@ export default function FieldTasks() {
                     <div className="flex items-center gap-1.5 text-slate-300">
                       <Clock className="h-3.5 w-3.5 text-amber-400 flex-shrink-0" />
                       <span className="truncate">
-                        <strong className="text-slate-400 font-normal">Target:</strong> {task.dueDate}
+                        <strong className="text-slate-400 font-normal">Assigned:</strong> {task.createdAt ? new Date(task.createdAt).toLocaleDateString() : '—'}
                       </span>
                     </div>
                   </div>
+
+                  {/* AI Extra Details */}
+                  {task.aiGenerated && (task.estimatedDuration || task.equipment || task.personnelNeeded > 0) && (
+                    <div className="grid grid-cols-3 gap-2 text-[10px] bg-purple-500/5 p-2 rounded-lg border border-purple-500/10 mb-3">
+                      {task.estimatedDuration && (
+                        <div className="text-slate-300">
+                          <span className="text-purple-400 font-bold block">Duration</span>
+                          {task.estimatedDuration}
+                        </div>
+                      )}
+                      {task.personnelNeeded > 0 && (
+                        <div className="text-slate-300">
+                          <span className="text-purple-400 font-bold block">Personnel</span>
+                          {task.personnelNeeded} needed
+                        </div>
+                      )}
+                      {task.equipment && (
+                        <div className="text-slate-300 col-span-full">
+                          <span className="text-purple-400 font-bold block">Equipment</span>
+                          {task.equipment}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Notes / Field Verification */}
                   {task.notes && (
@@ -374,18 +448,25 @@ export default function FieldTasks() {
 
                   {/* Progress Bar */}
                   <div className="mb-4">
-                    <div className="flex justify-between text-[11px] text-slate-400 mb-1">
-                      <span>Execution Progress</span>
-                      <span className="font-bold text-white">{task.progress}%</span>
-                    </div>
-                    <div className="w-full bg-slate-700/40 rounded-full h-1.5 overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-700 ${
-                          isCompleted ? 'bg-emerald-500' : isInProgress ? 'bg-amber-500' : 'bg-slate-600'
-                        }`}
-                        style={{ width: `${task.progress}%` }}
-                      />
-                    </div>
+                    {(() => {
+                      const pct = isCompleted ? 100 : isInProgress ? 50 : 0;
+                      return (
+                        <>
+                          <div className="flex justify-between text-[11px] text-slate-400 mb-1">
+                            <span>Execution Progress</span>
+                            <span className="font-bold text-white">{pct}%</span>
+                          </div>
+                          <div className="w-full bg-slate-700/40 rounded-full h-1.5 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-700 ${
+                                isCompleted ? 'bg-emerald-500' : isInProgress ? 'bg-amber-500' : 'bg-slate-600'
+                              }`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -527,6 +608,142 @@ export default function FieldTasks() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+      </>
+      )}
+
+      {/* Missions Tab */}
+      {activeTab === 'missions' && (
+        <div className="space-y-6">
+          {/* Stats */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="glass-card p-5 flex items-center gap-4">
+              <div className="bg-orange-500/10 rounded-xl p-3">
+                <Clock className="h-6 w-6 text-orange-400" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-white">{deployedTeams.length}</p>
+                <p className="text-xs text-slate-400 font-medium uppercase">Active Missions</p>
+              </div>
+            </div>
+
+            <div className="glass-card p-5 flex items-center gap-4">
+              <div className="bg-green-500/10 rounded-xl p-3">
+                <CheckCircle2 className="h-6 w-6 text-green-400" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-white">{completedMissions.length}</p>
+                <p className="text-xs text-slate-400 font-medium uppercase">Completed Missions</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Active Missions */}
+          {deployedTeams.length > 0 && (
+            <div className="space-y-4">
+              <h3 className="text-lg font-bold text-white">Active Missions</h3>
+              {deployedTeams.map((team) => (
+                <div key={team.id} className="glass-card p-5 border border-orange-500/20">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <h4 className="text-base font-bold text-white mb-1">{team.name}</h4>
+                      <div className="space-y-1 text-sm text-slate-300">
+                        <div className="flex items-center gap-2">
+                          <MapPin className="h-4 w-4 text-orange-400" />
+                          <span>{team.assignedArea || team.location}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-4 w-4 text-cyan-400" />
+                          <span>Duration: {getMissionDuration(team.deployedAt)}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Users className="h-4 w-4 text-purple-400" />
+                          <span>{team.members} personnel</span>
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setSelectedTeam(team)}
+                      className="px-4 py-2 bg-green-600 hover:bg-green-500 text-white text-sm font-semibold rounded-lg transition-colors"
+                    >
+                      Complete Mission
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {deployedTeams.length === 0 && (
+            <div className="glass-card p-12 text-center">
+              <Award className="h-12 w-12 text-slate-600 mx-auto mb-3" />
+              <p className="text-slate-300 font-semibold">No Active Missions</p>
+              <p className="text-slate-500 text-sm mt-1">Deploy teams from the Map or Demo Controls</p>
+            </div>
+          )}
+
+          {/* Completed Missions Log */}
+          {completedMissions.length > 0 && (
+            <div className="space-y-4">
+              <h3 className="text-lg font-bold text-white">Completed Missions</h3>
+              <div className="space-y-3">
+                {completedMissions.slice(0, 10).map((mission) => (
+                  <div key={mission.id} className="glass-card p-4 border border-green-500/20">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1">
+                        <h4 className="text-sm font-bold text-white">{mission.teamName}</h4>
+                        <p className="text-xs text-slate-400 mt-1">{mission.area}</p>
+                        <p className="text-xs text-slate-300 mt-2">{mission.notes}</p>
+                        <div className="flex items-center gap-4 mt-2 text-xs text-slate-400">
+                          <span>{mission.civiliansRescued} rescued</span>
+                          <span>{mission.personnelInvolved} personnel</span>
+                          <span>{new Date(mission.completedAt).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                      <CheckCircle2 className="h-5 w-5 text-green-400" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Mission Completion Modal */}
+          {selectedTeam && (
+            <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setSelectedTeam(null)}>
+              <div className="glass-card max-w-lg w-full p-6" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xl font-bold text-white">Complete Mission</h3>
+                  <button onClick={() => setSelectedTeam(null)} className="p-1 hover:bg-slate-800 rounded">
+                    <X className="h-5 w-5 text-slate-400" />
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-300 mb-1">Team: {selectedTeam.name}</p>
+                    <p className="text-xs text-slate-400">Location: {selectedTeam.assignedArea || selectedTeam.location}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-300 mb-2">Mission Report</label>
+                    <textarea
+                      value={missionReport}
+                      onChange={(e) => setMissionReport(e.target.value)}
+                      rows={4}
+                      placeholder="e.g., All residents evacuated. Area secured."
+                      className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm resize-none focus:outline-none focus:border-cyan-500"
+                    />
+                  </div>
+                  <button
+                    onClick={handleSubmitMissionCompletion}
+                    className="w-full px-5 py-3 bg-green-600 hover:bg-green-500 text-white font-semibold rounded-lg transition-colors"
+                  >
+                    Confirm & Return Team
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

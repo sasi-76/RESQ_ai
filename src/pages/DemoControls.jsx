@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Zap, MapPin, AlertTriangle, Droplets, Wind, Activity, Mountain, Plus, Trash2, Play, Navigation, Hospital, X, Clock, Bed, Ambulance, Smartphone, MessageSquare } from 'lucide-react';
+import { Zap, MapPin, AlertTriangle, Droplets, Wind, Activity, Mountain, Plus, Trash2, Play, Navigation, Hospital, X, Clock, Ambulance, Smartphone, MessageSquare } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { monitoredAreas, hospitals } from '../data/mockData';
 import { sendSOSAlert } from '../services/notificationService';
@@ -8,7 +8,6 @@ const disasterTypes = [
   { id: 'flood', label: 'Flood', icon: Droplets, color: '#3b82f6', emoji: '🌊' },
   { id: 'cyclone', label: 'Cyclone', icon: Wind, color: '#8b5cf6', emoji: '🌀' },
   { id: 'earthquake', label: 'Earthquake', icon: Activity, color: '#f59e0b', emoji: '🌍' },
-  { id: 'volcanic', label: 'Volcanic Eruption', icon: Mountain, color: '#ef4444', emoji: '🌋' },
 ];
 
 const severityLevels = [
@@ -19,7 +18,7 @@ const severityLevels = [
 ];
 
 function DemoControls() {
-  const { disasters, addDisaster, removeDisaster, clearAllDisasters, addSOSBeacon } = useApp();
+  const { disasters, addDisaster, removeDisaster, completeDisaster, clearAllDisasters, addSOSBeacon, dispatchAmbulance } = useApp();
   const [selectedDisaster, setSelectedDisaster] = useState(null);
   const [routeInfo, setRouteInfo] = useState(null);
   const [showRouteModal, setShowRouteModal] = useState(false);
@@ -505,28 +504,53 @@ function DemoControls() {
               {disasters.map(disaster => {
                 const type = disasterTypes.find(d => d.id === disaster.type);
                 const severity = severityLevels.find(s => s.value === disaster.severity);
+                const statusColors = {
+                  active: { bg: 'bg-red-500/20', text: 'text-red-300', border: 'border-red-500/40', label: 'ACTIVE' },
+                  assigned: { bg: 'bg-blue-500/20', text: 'text-blue-300', border: 'border-blue-500/40', label: 'TEAM ASSIGNED' },
+                  completed: { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/40', label: 'COMPLETED' },
+                };
+                const sc = statusColors[disaster.status] || statusColors.active;
                 return (
                   <div
                     key={disaster.id}
-                    className="p-4 rounded-xl border-l-4 bg-slate-800/40 hover:bg-slate-800/60 transition-colors"
-                    style={{ borderLeftColor: type?.color }}
+                    className={`p-4 rounded-xl border-l-4 transition-colors ${disaster.status === 'completed' ? 'bg-slate-800/20 opacity-60' : 'bg-slate-800/40 hover:bg-slate-800/60'}`}
+                    style={{ borderLeftColor: disaster.status === 'completed' ? '#22c55e' : disaster.status === 'assigned' ? '#3b82f6' : type?.color }}
                   >
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <span className="text-2xl">{type?.emoji}</span>
                         <div>
                           <h4 className="text-sm font-bold text-white">{disaster.areaName}</h4>
-                          <p className="text-xs text-slate-400">{type?.label}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <p className="text-xs text-slate-400">{type?.label}</p>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${sc.bg} ${sc.text} border ${sc.border}`}>
+                              {sc.label}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                      <button
-                        onClick={() => handleDeleteDisaster(disaster.id)}
-                        className="p-1 hover:bg-red-500/20 rounded transition-all hover:scale-110 active:scale-90"
-                        title="Delete disaster"
-                      >
-                        <Trash2 className="h-4 w-4 text-red-400 hover:text-red-300" />
-                      </button>
+                      {disaster.status !== 'completed' && (
+                        <button
+                          onClick={() => handleDeleteDisaster(disaster.id)}
+                          className="p-1 hover:bg-red-500/20 rounded transition-all hover:scale-110 active:scale-90"
+                          title="Delete disaster"
+                        >
+                          <Trash2 className="h-4 w-4 text-red-400 hover:text-red-300" />
+                        </button>
+                      )}
                     </div>
+
+                    {disaster.assignedTeamName && (
+                      <div className="mb-2 px-2.5 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/30 text-xs text-blue-300 font-semibold flex items-center gap-1.5">
+                        <span>🚁</span> Assigned: {disaster.assignedTeamName}
+                      </div>
+                    )}
+
+                    {disaster.nearestHospitalName && (
+                      <div className="mb-2 px-2.5 py-1.5 rounded-lg bg-green-500/10 border border-green-500/30 text-xs text-green-300 font-medium flex items-center gap-1.5">
+                        <Hospital className="h-3.5 w-3.5" /> Nearest: {disaster.nearestHospitalName} ({disaster.nearestHospitalDistance} km)
+                      </div>
+                    )}
 
                     <div className="space-y-2">
                       <div className="flex items-center justify-between text-xs">
@@ -550,14 +574,25 @@ function DemoControls() {
                         <p className="text-xs text-slate-400 mt-2">{disaster.description}</p>
                       )}
 
-                      {/* Find Route Button */}
-                      <button
-                        onClick={() => handleFindRoute(disaster)}
-                        className="w-full mt-3 px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-2 shadow-md hover:shadow-lg hover:scale-[1.02] active:scale-95"
-                      >
-                        <Navigation className="h-4 w-4" />
-                        Find Nearest Hospital Route
-                      </button>
+                      {disaster.status !== 'completed' && (
+                        <>
+                          <button
+                            onClick={() => handleFindRoute(disaster)}
+                            className="w-full mt-3 px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-2 shadow-md hover:shadow-lg hover:scale-[1.02] active:scale-95"
+                          >
+                            <Navigation className="h-4 w-4" />
+                            Find Nearest Hospital Route
+                          </button>
+
+                          <button
+                            onClick={() => completeDisaster(disaster.id)}
+                            className="w-full px-4 py-2 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-2 shadow-md hover:shadow-lg hover:scale-[1.02] active:scale-95"
+                          >
+                            <AlertTriangle className="h-4 w-4" />
+                            Mark as Completed
+                          </button>
+                        </>
+                      )}
 
                       <div className="flex items-center gap-4 mt-2 pt-2 border-t border-slate-700/50">
                         <div className="flex items-center gap-1 text-xs text-slate-500">
@@ -671,34 +706,6 @@ function DemoControls() {
 
         </div>
 
-        {/* Live Ntfy App Instructions */}
-        <div className="mt-6 p-5 bg-slate-900/80 rounded-xl border border-orange-500/30 relative z-10 shadow-lg">
-          <h4 className="text-sm font-bold text-orange-400 flex items-center gap-2 mb-2">
-            <Zap className="h-4 w-4" />
-            Live Phone Integration (Try it now!)
-          </h4>
-          <p className="text-xs text-slate-300 leading-relaxed">
-            You can generate a real SOS from your phone using the free <strong>ntfy</strong> app.<br/>
-            1. Install the <a href="https://ntfy.sh" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">ntfy app</a> (iOS/Android).<br/>
-            2. Open the app and subscribe to the topic: <strong className="text-white bg-slate-800 px-1 rounded">resq-tn-sos-inbound</strong><br/>
-            3. Tap the topic, type a message like <code className="bg-black/50 px-1 rounded text-orange-300">Location: Adyar. Flooded, need rescue!</code>, and hit Send.<br/>
-            4. The SOS will instantly appear on your Incident Reports dashboard!
-          </p>
-        </div>
-      </div>
-
-      {/* Export/Integration Info */}
-      <div className="glass-card p-5 border-l-4 border-l-blue-500 bg-blue-500/5">
-        <h4 className="text-sm font-semibold text-blue-400 mb-2">💡 Integration Tip</h4>
-        <p className="text-xs text-slate-400 leading-relaxed">
-          Active disasters are stored in component state. To integrate with the main dashboard:
-        </p>
-        <ul className="text-xs text-slate-400 mt-2 space-y-1 ml-4">
-          <li>• Use React Context to share disaster state across pages</li>
-          <li>• Store in localStorage for persistence across page refreshes</li>
-          <li>• Trigger real alerts and team deployments based on manual disasters</li>
-          <li>• Update the map markers to show demo disasters</li>
-        </ul>
       </div>
 
       {/* Route Modal */}
@@ -786,11 +793,11 @@ function DemoControls() {
                   <div className="space-y-3">
                     <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
                       <div className="flex items-center gap-2">
-                        <Bed className="h-5 w-5 text-blue-400" />
-                        <span className="text-sm text-slate-400">Available Beds</span>
+                        <Hospital className="h-5 w-5 text-blue-400" />
+                        <span className="text-sm text-slate-400">Facility Status</span>
                       </div>
-                      <span className="text-lg font-bold text-white">
-                        {routeInfo.nearestHospital.freeBeds} / {routeInfo.nearestHospital.totalBeds}
+                      <span className="text-lg font-bold text-white capitalize">
+                        {routeInfo.nearestHospital.status || 'operational'}
                       </span>
                     </div>
                     <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
@@ -863,33 +870,12 @@ function DemoControls() {
               <div className="flex gap-3">
                 <button
                   onClick={() => {
-                    console.log('📞 Dispatching ambulance to:', routeInfo.nearestHospital.name);
-                    
-                    const notification = document.createElement('div');
-                    notification.className = 'fixed top-24 right-6 z-[100] animate-slide-up';
-                    notification.innerHTML = `
-                      <div class="glass-card p-4 border-l-4 border-l-emerald-500 bg-emerald-950/80 shadow-2xl shadow-emerald-500/20 backdrop-blur-xl max-w-md rounded-xl border border-slate-700">
-                        <div class="flex items-start gap-3">
-                          <div class="text-2xl mt-1">🚑</div>
-                          <div>
-                            <h4 class="text-sm font-bold text-emerald-400 mb-1 tracking-wide">AMBULANCE DISPATCHED</h4>
-                            <p class="text-xs text-slate-300 mb-2">Unit dispatched from ${routeInfo.nearestHospital.name}</p>
-                            <div class="flex items-center gap-4 bg-emerald-900/40 p-2 rounded-lg border border-emerald-500/20">
-                              <p class="text-xs text-emerald-300 font-bold">⏱️ ETA: ${routeInfo.travelTime} mins</p>
-                              <p class="text-xs text-emerald-300 font-bold">📍 Dist: ${routeInfo.distance}</p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    `;
-                    document.body.appendChild(notification);
-                    setTimeout(() => {
-                      notification.style.opacity = '0';
-                      notification.style.transition = 'opacity 0.5s ease';
-                      setTimeout(() => notification.remove(), 500);
-                    }, 4000);
-
-                    setShowRouteModal(false); // Close the modal for better UX
+                    dispatchAmbulance(
+                      routeInfo.nearestHospital.id,
+                      routeInfo.disaster.areaName,
+                      routeInfo.disaster.id
+                    );
+                    setShowRouteModal(false);
                   }}
                   className="flex-1 px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-semibold rounded-lg transition-all flex items-center justify-center gap-2 shadow-lg hover:shadow-xl"
                 >

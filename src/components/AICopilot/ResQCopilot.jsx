@@ -61,8 +61,9 @@ function detectIntent(message, { teams, disasters, sosBeacons, hospitals }) {
   if (q.includes("ambulance") && (q.includes("dispatch") || q.includes("send") || q.includes("deploy"))) {
     const hosp = hospitals.find((h) => h.ambulances > 0);
     const destM = message.match(/\bto\s+([A-Za-z][a-zA-Z\s]+)/);
-    const dest  = destM ? destM[1].trim() : (disasters[0] ? disasters[0].areaName : "Emergency Site");
-    if (hosp) return { type: "dispatch_ambulance", hospitalId: hosp.id, dest, label: "Dispatch ambulance from " + hosp.name };
+    const matchedDisaster = disasters.find((d) => d.status !== 'completed' && destM && destM[1] && d.areaName.toLowerCase().includes(destM[1].trim().toLowerCase())) || disasters.find((d) => d.status !== 'completed');
+    const dest  = destM ? destM[1].trim() : (matchedDisaster ? matchedDisaster.areaName : "Emergency Site");
+    if (hosp) return { type: "dispatch_ambulance", hospitalId: hosp.id, dest, disasterId: matchedDisaster?.id || null, label: "Dispatch ambulance from " + hosp.name };
   }
 
   if (q.includes("complete mission") || q.includes("mission done") || q.includes("end mission")) {
@@ -128,7 +129,7 @@ function executeIntent(intent, actions, allTeams) {
       logAiAction('Hazard State Manager', `Clear Disaster ${intent.disasterId}`, `AI evaluated disaster as resolved and cleared from active states`);
       return { actionLabel: intent.label, waLinks: [] };
     case "dispatch_ambulance":
-      dispatchAmbulance(intent.hospitalId, intent.dest);
+      dispatchAmbulance(intent.hospitalId, intent.dest, intent.disasterId || null);
       logAiAction('Medical Response Optimizer', `Dispatch Ambulance to ${intent.dest}`, `AI confirmed emergency medical need and dispatched unit`);
       return { actionLabel: intent.label, waLinks: [] };
     case "complete_mission":
@@ -152,7 +153,7 @@ function executeIntent(intent, actions, allTeams) {
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function ResQCopilot() {
   const {
-    disasters, teams, hospitals, sosBeacons, completedMissions, dams, getStats,
+    disasters, teams, hospitals, sosBeacons, completedMissions, getStats,
     deployTeam, recallTeam, resolveSOSBeacon, assignNearestTeamToSOS, removeDisaster,
     dispatchAmbulance, completeMission, showNotification, logAiAction
   } = useApp();
@@ -199,7 +200,7 @@ export default function ResQCopilot() {
 
     // 2. Get AI reply
     try {
-      const reply = await chatWithAIReasoning(text, { disasters, teams, hospitals, sosBeacons, stats, completedMissions, dams });
+      const reply = await chatWithAIReasoning(text, { disasters, teams, hospitals, sosBeacons, stats, completedMissions });
       const msgs = [{ id: Date.now() + 1, sender: "ai", text: reply, source: "reasoning", timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }];
       if (actionLabel) msgs.push({ id: Date.now() + 2, sender: "action", intent, label: actionLabel, waLinks, requireApproval, targetDisaster, timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) });
       setMessages((p) => [...p, ...msgs]);
@@ -218,7 +219,7 @@ export default function ResQCopilot() {
     setMessages((prev) => prev.map(m => m.id === msgId ? { ...m, label: "Citizen Alert Broadcasted Successfully ✓", requireApproval: false } : m));
   };
 
-  const quickPrompts = ["Check Mettur & Chembarambakkam dam levels", "Recall all deployed teams", "Deploy nearest team", "Alert citizens about flood", "Resolve pending SOS", "Dispatch ambulance", "Generate situation report"];
+  const quickPrompts = ["Recall all deployed teams", "Deploy nearest team", "Alert citizens about flood", "Resolve pending SOS", "Dispatch ambulance", "Generate situation report"];
 
   const intentIcon = {
     deploy_team:        <Users       className="h-3.5 w-3.5" />,
@@ -232,21 +233,59 @@ export default function ResQCopilot() {
 
   return (
     <>
-      {/* Launcher */}
-      <button onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-6 right-6 z-40 flex items-center gap-2.5 px-4 py-3 rounded-full bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-semibold shadow-2xl hover:shadow-blue-500/30 transition-all hover:scale-105 active:scale-95 border border-white/20"
-        title="Open ResQ AI Copilot">
-        <span className="relative flex h-3 w-3">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-          <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-400" />
-        </span>
-        <Bot className="h-5 w-5" />
-        <span className="text-sm tracking-wide">ResQ Copilot</span>
-      </button>
+      {/* Floating Launcher Button — bottom-right, above taskbar */}
+      {!isOpen && (
+        <div data-copilot-launcher style={{
+          position: 'fixed',
+          bottom: '28px',
+          right: '28px',
+          zIndex: 99999,
+        }}>
+          <button onClick={() => setIsOpen(true)}
+            title="Open ResQ AI Copilot"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              padding: '14px 22px',
+              borderRadius: '9999px',
+              background: 'linear-gradient(135deg, #2563eb, #4f46e5, #7c3aed)',
+              color: '#ffffff',
+              fontWeight: 600,
+              fontSize: '14px',
+              border: '1px solid rgba(255,255,255,0.2)',
+              cursor: 'pointer',
+              boxShadow: '0 8px 32px rgba(79, 70, 229, 0.5)',
+              transition: 'transform 0.15s, box-shadow 0.15s',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.05)'; e.currentTarget.style.boxShadow = '0 12px 40px rgba(79, 70, 229, 0.6)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 8px 32px rgba(79, 70, 229, 0.5)'; }}
+          >
+            <span style={{ position: 'relative', display: 'flex', height: '12px', width: '12px' }}>
+              <span style={{ position: 'absolute', display: 'inline-flex', height: '100%', width: '100%', borderRadius: '9999px', backgroundColor: '#34d399', opacity: 0.75, animation: 'ping 1s cubic-bezier(0, 0, 0.2, 1) infinite' }} />
+              <span style={{ position: 'relative', display: 'inline-flex', height: '12px', width: '12px', borderRadius: '9999px', backgroundColor: '#34d399' }} />
+            </span>
+            <Bot className="h-5 w-5" style={{ color: '#ffffff' }} />
+            <span style={{ color: '#ffffff' }}>ResQ Copilot</span>
+          </button>
+        </div>
+      )}
 
-      {/* Drawer */}
+      {/* Chat Drawer */}
       {isOpen && (
-        <div className="fixed bottom-20 right-6 z-50 w-[95vw] sm:w-[440px] h-[600px] rounded-2xl bg-slate-900/95 backdrop-blur-xl border border-slate-700/80 shadow-2xl flex flex-col overflow-hidden animate-slide-up">
+        <div data-copilot-drawer style={{
+          position: 'fixed',
+          bottom: '28px',
+          right: '28px',
+          zIndex: 99999,
+          width: '440px',
+          maxWidth: '95vw',
+          height: '580px',
+          borderRadius: '16px',
+          overflow: 'hidden',
+          boxShadow: '0 12px 48px rgba(0, 0, 0, 0.5)',
+        }}
+        className="bg-slate-900/95 backdrop-blur-xl border border-slate-700/80 flex flex-col animate-slide-up">
 
           {/* Header */}
           <div className="px-4 py-3.5 bg-slate-950/90 border-b border-slate-800 flex items-center justify-between">

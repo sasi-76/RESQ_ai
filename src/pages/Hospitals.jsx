@@ -20,16 +20,17 @@ function Hospitals() {
   const {
     hospitals,
     dispatchAmbulance,
-    userLocation,
-    selectedSearchLocation,
+    distanceOrigin,
     detectUserLocation,
     isDetectingLocation,
+    disasters,
   } = useApp();
 
   const [selectedHospital, setSelectedHospital] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
 
-  const activeOrigin = selectedSearchLocation || userLocation;
+  const activeOrigin = distanceOrigin;
+  const hasActiveDisaster = disasters.some((d) => d.status !== 'completed');
 
   // Filter hospitals based on search input
   const filteredHospitals = hospitals.filter(
@@ -87,21 +88,23 @@ function Hospitals() {
             <span className="relative flex h-2.5 w-2.5">
               <span
                 className={`absolute inline-flex h-full w-full rounded-full ${
-                  activeOrigin.isDetected
-                    ? 'animate-ping bg-emerald-400 opacity-75'
-                    : 'bg-blue-400'
+                  activeOrigin.isDisaster
+                    ? 'animate-ping bg-red-400 opacity-75'
+                    : 'animate-ping bg-emerald-400 opacity-75'
                 }`}
               />
               <span
                 className={`relative inline-flex h-2.5 w-2.5 rounded-full ${
-                  activeOrigin.isDetected ? 'bg-emerald-500' : 'bg-blue-500'
+                  activeOrigin.isDisaster ? 'bg-red-500' : 'bg-emerald-500'
                 }`}
               />
             </span>
             <div>
-              <p className="text-[10px] text-slate-400 font-semibold uppercase">Proximity Measured From:</p>
-              <p className="text-xs font-bold text-white truncate max-w-[220px]">
-                {activeOrigin.name}
+              <p className="text-[10px] text-slate-400 font-semibold uppercase">
+                {activeOrigin.isDisaster ? 'Distance From Disaster:' : 'Proximity Measured From:'}
+              </p>
+              <p className={`text-xs font-bold truncate max-w-[260px] ${activeOrigin.isDisaster ? 'text-red-300' : 'text-white'}`}>
+                {activeOrigin.label}
               </p>
             </div>
           </div>
@@ -189,7 +192,7 @@ function Hospitals() {
               <tr className="border-b border-slate-700/50 text-slate-400 text-xs font-semibold uppercase tracking-wider">
                 <th className="text-left p-4">Facility Name</th>
                 <th className="text-center p-4">Category</th>
-                <th className="text-center p-4">Distance from You</th>
+                <th className="text-center p-4">{hasActiveDisaster ? 'Distance from Disaster' : 'Distance from You'}</th>
                 <th className="text-center p-4">Ambulance ETA</th>
                 <th className="text-center p-4">Ambulances</th>
                 <th className="text-center p-4">Emergency Status</th>
@@ -339,12 +342,14 @@ function Hospitals() {
                 <div className="glass-card p-4 border-l-4 border-l-emerald-500 bg-emerald-500/5">
                   <div className="flex items-center gap-2 mb-1 text-slate-400 text-xs uppercase font-semibold">
                     <Compass className="h-4 w-4 text-emerald-400" />
-                    Distance from Base
+                    {hasActiveDisaster ? 'Distance from Disaster' : 'Distance from Base'}
                   </div>
                   <p className="text-3xl font-extrabold text-emerald-400">
                     {selectedHospital.distance} km
                   </p>
-                  <p className="text-[11px] text-slate-500 mt-0.5">Calculated straight-line radius</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    {hasActiveDisaster ? `From: ${activeOrigin.label}` : 'Calculated straight-line radius'}
+                  </p>
                 </div>
 
                 <div className="glass-card p-4 border-l-4 border-l-blue-500 bg-blue-500/5">

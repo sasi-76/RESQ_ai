@@ -515,22 +515,18 @@ export async function chatWithAIReasoning(message, contextData = {}) {
     sosBeacons = [],
     stats = {},
     completedMissions = [],
-    dams = [],
   } = contextData;
 
   const systemPrompt =
     'You are ResQ Copilot, an expert AI assistant specializing in disaster management and emergency response for Tamil Nadu, India. ' +
-    'You have access to real-time operational data including major Tamil Nadu dams (Mettur, Bhavanisagar, Vaigai, Chembarambakkam, etc.). ' +
-    'Provide clear, structured, and actionable answers. Be concise but thorough. Use relevant emojis to improve readability. ' +
+    'You have access to real-time operational data. Provide clear, structured, and actionable answers. ' +
+    'Be concise but thorough. Use relevant emojis to improve readability. ' +
     'Format responses with bullet points when listing items. Never include raw JSON in your answer.';
 
   const contextBlock = `
 === LIVE OPERATIONAL DATA ===
 Active Disasters: ${disasters.length}
 ${disasters.map(d => `  • ${d.type} at ${d.areaName} — Severity: ${d.severity}, Risk: ${d.riskPercent}%`).join('\n')}
-
-State Reservoirs & Major Dams: ${dams.length}
-${dams.map(d => `  • ${d.name} (${d.river}): ${d.currentLevelFt}/${d.frlFt} ft (${Math.round((d.currentLevelFt/d.frlFt)*100)}% Full), Outflow: ${d.outflowCusecs.toLocaleString()} cusecs, Status: ${d.status}, Downstream ETA: ${d.transitSchedule?.[0]?.peakEta || 'N/A'}`).join('\n')}
 
 Response Teams: ${teams.length} total
 ${teams.map(t => `  • ${t.name}: ${t.status} (${t.members} members)`).join('\n')}
@@ -698,6 +694,230 @@ Keep explanation under 150 words.
 }
 
 // ============================================================================
+// AI DECISION ENGINE — Real AI-powered disaster decisions for Admin Dashboard
+// ============================================================================
+
+/**
+ * Analyze a disaster and generate a structured AI decision.
+ * Used by the AI Admin Dashboard for real AI-powered decision-making.
+ */
+export async function analyzeDisasterWithAI(disaster, contextData = {}) {
+  const {
+    monitoredAreas = [],
+    teams = [],
+    hospitals = [],
+  } = contextData;
+
+  const availableTeams = teams.filter(t => t.status === 'standby');
+  const nearbyHospitals = hospitals.slice(0, 5);
+
+  const prompt = `
+You are the AI Decision Engine for ResQAI, a disaster management system for Tamil Nadu, India.
+Analyze this disaster event and produce a structured emergency response decision.
+
+=== DISASTER EVENT ===
+Type: ${disaster.type || 'Unknown'}
+Area: ${disaster.areaName || 'Unknown'}
+District: ${disaster.district || 'Unknown'}
+Severity: ${disaster.severity || 'Unknown'}
+Risk Level: ${disaster.riskPercent || 0}%
+Coordinates: ${disaster.lat}, ${disaster.lng}
+Description: ${disaster.description || 'No description'}
+Timestamp: ${disaster.timestamp || new Date().toISOString()}
+
+=== AVAILABLE RESOURCES ===
+Standby Teams: ${availableTeams.length} (${availableTeams.map(t => t.name + ' - ' + t.members + ' members').join(', ') || 'None'})
+Nearby Hospitals: ${nearbyHospitals.map(h => h.name + ' (' + (h.ambulances || 0) + ' ambulances)').join(', ') || 'None'}
+
+=== INSTRUCTIONS ===
+Provide your analysis as JSON with these exact fields:
+{
+  "decision": "One-line action statement (e.g., 'Deploy Alpha Response Unit for flood rescue in Cuddalore')",
+  "confidence": <number 0-100>,
+  "reasoning": "2-3 sentence explanation of why this decision was made, citing specific data points",
+  "riskTrend": "increasing|decreasing|stable",
+  "recommendedTeams": <number 1-5>,
+  "estimatedAffectedPopulation": <number>,
+  "priorityActions": ["action1", "action2", "action3"],
+  "evacuationNeeded": true|false,
+  "alertLevel": "P1|P2|P3|P4",
+  "estimatedResponseTime": "e.g., 45 minutes"
+}
+
+Be specific to Tamil Nadu geography and disaster patterns. Base confidence on data completeness and disaster severity.
+Return ONLY the JSON object, no extra text.
+`;
+
+  try {
+    const response = await callLLM(prompt, { model: 'fast', temperature: 0.3 });
+    const jsonMatch = response.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      return {
+        success: true,
+        decision: parsed.decision || `Deploy response to ${disaster.areaName}`,
+        confidence: Math.min(100, Math.max(0, Number(parsed.confidence) || 85)),
+        reasoning: parsed.reasoning || 'AI analysis completed.',
+        riskTrend: parsed.riskTrend || 'stable',
+        recommendedTeams: Number(parsed.recommendedTeams) || 1,
+        estimatedAffectedPopulation: Number(parsed.estimatedAffectedPopulation) || 10000,
+        priorityActions: Array.isArray(parsed.priorityActions) ? parsed.priorityActions : [],
+        evacuationNeeded: Boolean(parsed.evacuationNeeded),
+        alertLevel: parsed.alertLevel || 'P2',
+        estimatedResponseTime: parsed.estimatedResponseTime || 'Unknown',
+      };
+    }
+    return { success: false, raw: response };
+  } catch (error) {
+    console.error('AI Decision Engine error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Re-analyze a pending decision with updated context.
+ */
+export async function reanalyzeDecision(decision, contextData = {}) {
+  const prompt = `
+You are the AI Decision Engine for ResQAI. Re-evaluate this pending disaster decision with fresh analysis.
+
+=== CURRENT DECISION ===
+Area: ${decision.area}
+Type: ${decision.type || 'disaster'}
+Original Decision: ${decision.decision}
+Original Confidence: ${decision.confidence}%
+Original Reasoning: ${decision.reasoning}
+
+=== INSTRUCTIONS ===
+Provide an updated analysis as JSON:
+{
+  "decision": "Updated one-line action statement",
+  "confidence": <number 0-100>,
+  "reasoning": "Updated 2-3 sentence reasoning with current assessment",
+  "riskTrend": "increasing|decreasing|stable",
+  "recommendedTeams": <number 1-5>,
+  "priorityActions": ["action1", "action2", "action3"],
+  "evacuationNeeded": true|false,
+  "alertLevel": "P1|P2|P3|P4"
+}
+
+Return ONLY the JSON object.
+`;
+
+  try {
+    const response = await callLLM(prompt, { model: 'fast', temperature: 0.3 });
+    const jsonMatch = response.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      return {
+        success: true,
+        decision: parsed.decision || decision.decision,
+        confidence: Math.min(100, Math.max(0, Number(parsed.confidence) || 85)),
+        reasoning: parsed.reasoning || 'Re-analysis completed.',
+        riskTrend: parsed.riskTrend || 'stable',
+        recommendedTeams: Number(parsed.recommendedTeams) || 1,
+        priorityActions: Array.isArray(parsed.priorityActions) ? parsed.priorityActions : [],
+        evacuationNeeded: Boolean(parsed.evacuationNeeded),
+        alertLevel: parsed.alertLevel || 'P2',
+      };
+    }
+    return { success: false, raw: response };
+  } catch (error) {
+    console.error('AI Re-analysis error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// ============================================================================
+// AI FIELD TASK GENERATOR — LLM-powered task creation for approved decisions
+// ============================================================================
+
+/**
+ * Generate detailed field tasks using AI when a decision is approved.
+ * Returns structured task objects ready for the Field Tasks page.
+ */
+export async function generateFieldTasksWithAI(decision, contextData = {}) {
+  const {
+    teams = [],
+    area = decision.area || 'Unknown',
+    type = decision.type || 'disaster',
+    alertLevel = decision.alertLevel || 'P2',
+    deployedTeamNames = [],
+  } = contextData;
+
+  const prompt = `
+You are the ResQAI Task Engine for Tamil Nadu disaster management.
+An AI decision has been APPROVED by the controller. Generate detailed field tasks for the response teams.
+
+=== APPROVED DECISION ===
+Decision: ${decision.decision}
+Area: ${area}
+Disaster Type: ${type}
+Alert Level: ${alertLevel}
+AI Reasoning: ${decision.reasoning || 'N/A'}
+Confidence: ${decision.confidence || 0}%
+Estimated Affected Population: ${decision.affectedPopulation || 'Unknown'}
+Evacuation Needed: ${decision.evacuationNeeded ? 'YES' : 'NO'}
+Recommended Teams: ${decision.recommendedTeams || 1}
+
+=== DEPLOYED TEAMS ===
+${deployedTeamNames.length > 0 ? deployedTeamNames.join(', ') : 'No teams deployed yet'}
+
+=== INSTRUCTIONS ===
+Generate 3-5 detailed field tasks. Each task must be specific, actionable, and tailored to this exact disaster scenario in Tamil Nadu.
+
+Return a JSON array of tasks:
+[
+  {
+    "title": "Short clear task title (5-10 words, e.g., 'Evacuate low-lying Velachery households to relief camp')",
+    "description": "Detailed 2-3 sentence description with specific instructions, locations, and expected outcomes",
+    "category": "Evacuation|Medical|Relief|Infrastructure|Communication|Reconnaissance",
+    "priority": "immediate|high|medium",
+    "estimatedDuration": "e.g., 2 hours, 45 minutes",
+    "personnelNeeded": <number>,
+    "equipment": "specific equipment needed",
+    "notes": "any special instructions or safety warnings"
+  }
+]
+
+Rules:
+- Use real Tamil Nadu area names and landmarks relevant to "${area}"
+- First task should address the most urgent need
+- If evacuation is needed, make it the first task
+- Include at least one Medical and one Communication task
+- Be specific about routes, shelters, hospitals, and equipment
+- Return ONLY the JSON array, no extra text
+`;
+
+  try {
+    const response = await callLLM(prompt, { model: 'fast', temperature: 0.4 });
+    const jsonMatch = response.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return {
+          success: true,
+          tasks: parsed.map((t) => ({
+            title: t.title || 'Unnamed Task',
+            description: t.description || '',
+            category: ['Evacuation', 'Medical', 'Relief', 'Infrastructure', 'Communication', 'Reconnaissance'].includes(t.category) ? t.category : 'Reconnaissance',
+            priority: ['immediate', 'high', 'medium'].includes(t.priority) ? t.priority : 'medium',
+            estimatedDuration: t.estimatedDuration || '',
+            personnelNeeded: Number(t.personnelNeeded) || 0,
+            equipment: t.equipment || '',
+            notes: t.notes || '',
+          })),
+        };
+      }
+    }
+    return { success: false, raw: response };
+  } catch (error) {
+    console.error('AI Field Task Generator error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// ============================================================================
 // BATCH PROCESSING
 // ============================================================================
 
@@ -732,6 +952,11 @@ export default {
   callGroqReasoning,
   callGemini,
   callLLM,
+
+  // AI Decision Engine
+  analyzeDisasterWithAI,
+  reanalyzeDecision,
+  generateFieldTasksWithAI,
 
   // Disaster management use cases
   analyzeDisasterReport,
