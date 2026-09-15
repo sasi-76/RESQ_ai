@@ -1119,19 +1119,19 @@ function Dashboard() {
 
           {/* Right: Type-to-Search Manual Location Analysis Bar */}
           <div className="lg:col-span-7 space-y-3.5" ref={searchContainerRef}>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Search className="h-4 w-4 text-cyan-400" />
-                <h2 className="text-xs font-bold uppercase tracking-widest text-slate-300 font-mono">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-3">
+                <Search className="h-5 w-5 text-cyan-400 shrink-0" />
+                <h2 className="text-sm font-bold uppercase tracking-wide text-white">
                   Location Intelligence &amp; Risk Search
                 </h2>
               </div>
               {analyzedLocation && (
                 <button
                   onClick={handleClearAnalysis}
-                  className="text-[11px] text-slate-400 hover:text-white flex items-center gap-1 transition-colors font-medium"
+                  className="text-xs text-slate-400 hover:text-white flex items-center gap-1.5 transition-colors font-semibold bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg"
                 >
-                  <X className="h-3.5 w-3.5" />
+                  <X className="h-4 w-4" />
                   Clear Search
                 </button>
               )}
@@ -1148,11 +1148,11 @@ function Dashboard() {
                     if (searchResults.length > 0) setSearchDropdownOpen(true);
                   }}
                   placeholder="Search any town, neighborhood, city or district (e.g. Cuddalore, Madurai, Velachery)..."
-                  className="w-full rounded-xl bg-slate-900/90 border border-slate-700/80 px-4 py-3 pl-11 pr-11 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/30 transition-all shadow-inner"
+                  className="w-full rounded-xl bg-slate-900/95 border-2 border-slate-700 px-5 py-3.5 pl-12 pr-12 text-sm font-medium text-white placeholder-slate-400 focus:outline-none focus:border-cyan-400 focus:ring-3 focus:ring-cyan-500/40 transition-all"
                 />
-                <Search className="absolute left-3.5 h-4 w-4 text-slate-400 pointer-events-none" />
+                <Search className="absolute left-4 h-5 w-5 text-cyan-400 pointer-events-none" />
                 {isSearching && (
-                  <RefreshCw className="absolute right-3.5 h-4 w-4 text-cyan-400 animate-spin" />
+                  <RefreshCw className="absolute right-4 h-5 w-5 text-cyan-400 animate-spin" />
                 )}
                 {!isSearching && searchQuery && (
                   <button
@@ -1160,9 +1160,9 @@ function Dashboard() {
                       setSearchQuery('');
                       setSearchResults([]);
                     }}
-                    className="absolute right-3.5 text-slate-400 hover:text-white"
+                    className="absolute right-4 text-slate-400 hover:text-white transition-colors"
                   >
-                    <X className="h-4 w-4" />
+                    <X className="h-5 w-5" />
                   </button>
                 )}
               </div>
