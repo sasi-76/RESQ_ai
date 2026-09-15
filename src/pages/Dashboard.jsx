@@ -2409,61 +2409,11 @@ function Dashboard() {
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════════ */}
-      {/* ── MULTI-HAZARD RISK DISTRIBUTION & MONITORED SECTORS ─────────────── */}
+      {/* ── MONITORED PRIORITY ZONES ───────────────────────────────────────── */}
       {/* ═══════════════════════════════════════════════════════════════════════ */}
-      <div className="relative z-10 grid grid-cols-1 lg:grid-cols-5 gap-6">
-        {/* Hazard Risk Overview - Donut Chart */}
-        <div className="lg:col-span-3 glass-card p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
-                Hazard Threat Distribution
-              </h2>
-              <p className="text-xs text-slate-400">Proportional risk contribution across disaster models</p>
-            </div>
-            <span className="text-[10px] text-slate-300 font-mono bg-slate-900 px-3 py-1 rounded-full border border-slate-700">
-              24h Sensor Aggregate
-            </span>
-          </div>
-
-          <div className="h-[290px] relative">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={hazardRiskOverview}
-                  cx="50%"
-                  cy="45%"
-                  innerRadius={72}
-                  outerRadius={108}
-                  paddingAngle={4}
-                  dataKey="value"
-                  strokeWidth={0}
-                >
-                  {hazardRiskOverview.map((entry, idx) => (
-                    <Cell
-                      key={idx}
-                      fill={entry.color}
-                      style={{ filter: 'drop-shadow(0 0 8px rgba(0,0,0,0.5))' }}
-                    />
-                  ))}
-                </Pie>
-                <Tooltip content={<PieTooltipContent />} />
-                <Legend content={<CustomPieLegend />} />
-              </PieChart>
-            </ResponsiveContainer>
-            {/* Center Label Overlay */}
-            <div
-              className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"
-              style={{ top: '-8%' }}
-            >
-              <span className="text-2xl font-black text-white tracking-tight">100 km</span>
-              <span className="text-[11px] text-slate-400 font-mono">Radar Scope</span>
-            </div>
-          </div>
-        </div>
-
+      <div className="relative z-10">
         {/* Affected Monitored Zones with Distances */}
-        <div className="lg:col-span-2 glass-card p-6 flex flex-col justify-between">
+        <div className="glass-card p-6 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-sm font-bold text-white uppercase tracking-wider font-mono">

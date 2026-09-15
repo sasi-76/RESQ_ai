@@ -706,34 +706,6 @@ function DemoControls() {
 
         </div>
 
-        {/* Live Ntfy App Instructions */}
-        <div className="mt-6 p-5 bg-slate-900/80 rounded-xl border border-orange-500/30 relative z-10 shadow-lg">
-          <h4 className="text-sm font-bold text-orange-400 flex items-center gap-2 mb-2">
-            <Zap className="h-4 w-4" />
-            Live Phone Integration (Try it now!)
-          </h4>
-          <p className="text-xs text-slate-300 leading-relaxed">
-            You can generate a real SOS from your phone using the free <strong>ntfy</strong> app.<br/>
-            1. Install the <a href="https://ntfy.sh" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">ntfy app</a> (iOS/Android).<br/>
-            2. Open the app and subscribe to the topic: <strong className="text-white bg-slate-800 px-1 rounded">resq-tn-sos-inbound</strong><br/>
-            3. Tap the topic, type a message like <code className="bg-black/50 px-1 rounded text-orange-300">Location: Adyar. Flooded, need rescue!</code>, and hit Send.<br/>
-            4. The SOS will instantly appear on your Incident Reports dashboard!
-          </p>
-        </div>
-      </div>
-
-      {/* Export/Integration Info */}
-      <div className="glass-card p-5 border-l-4 border-l-blue-500 bg-blue-500/5">
-        <h4 className="text-sm font-semibold text-blue-400 mb-2">💡 Integration Tip</h4>
-        <p className="text-xs text-slate-400 leading-relaxed">
-          Active disasters are stored in component state. To integrate with the main dashboard:
-        </p>
-        <ul className="text-xs text-slate-400 mt-2 space-y-1 ml-4">
-          <li>• Use React Context to share disaster state across pages</li>
-          <li>• Store in localStorage for persistence across page refreshes</li>
-          <li>• Trigger real alerts and team deployments based on manual disasters</li>
-          <li>• Update the map markers to show demo disasters</li>
-        </ul>
       </div>
 
       {/* Route Modal */}
