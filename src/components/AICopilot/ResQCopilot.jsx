@@ -235,7 +235,7 @@ export default function ResQCopilot() {
     <>
       {/* Launcher */}
       <button onClick={() => setIsOpen(!isOpen)}
-        className="fixed top-20 right-6 z-40 flex items-center gap-2.5 px-4 py-3 rounded-full bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-semibold shadow-2xl hover:shadow-blue-500/30 transition-all hover:scale-105 active:scale-95 border border-white/20"
+        className="fixed bottom-6 right-6 z-40 flex items-center gap-2.5 px-4 py-3 rounded-full bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-semibold shadow-2xl hover:shadow-blue-500/30 transition-all hover:scale-105 active:scale-95 border border-white/20"
         title="Open ResQ AI Copilot">
         <span className="relative flex h-3 w-3">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
@@ -247,7 +247,7 @@ export default function ResQCopilot() {
 
       {/* Drawer */}
       {isOpen && (
-        <div className="fixed top-[88px] right-6 z-50 w-[95vw] sm:w-[440px] h-[calc(100vh-104px)] max-h-[700px] rounded-2xl bg-slate-900/95 backdrop-blur-xl border border-slate-700/80 shadow-2xl flex flex-col overflow-hidden animate-slide-up">
+        <div className="fixed bottom-20 right-6 z-50 w-[95vw] sm:w-[440px] h-[600px] rounded-2xl bg-slate-900/95 backdrop-blur-xl border border-slate-700/80 shadow-2xl flex flex-col overflow-hidden animate-slide-up">
 
           {/* Header */}
           <div className="px-4 py-3.5 bg-slate-950/90 border-b border-slate-800 flex items-center justify-between">
