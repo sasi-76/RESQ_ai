@@ -214,8 +214,43 @@ export const tnDamData = [
   }
 ];
 
+export function normalizeDam(dam) {
+  if (!dam) return null;
+  const lat = Number(dam.latitude ?? dam.lat ?? 12.0);
+  const lng = Number(dam.longitude ?? dam.lng ?? 78.0);
+  const current = Number(dam.currentLevel ?? dam.currentLevelFt ?? 0);
+  const frl = Number(dam.fullReservoirLevel ?? dam.frlFt ?? (current > 0 ? current : 100));
+  const storage = Number(dam.storage ?? dam.storageMcft ?? (dam.storageTmc ? dam.storageTmc * 1000 : 0));
+  const capacity = Number(dam.capacity ?? dam.storageMcft ?? (dam.capacityTmc ? dam.capacityTmc * 1000 : storage));
+  const inflow = Number(dam.inflow ?? dam.inflowCusecs ?? 0);
+  const outflow = Number(dam.outflow ?? dam.outflowCusecs ?? 0);
+
+  return {
+    ...dam,
+    lat,
+    lng,
+    latitude: lat,
+    longitude: lng,
+    currentLevel: current,
+    currentLevelFt: current,
+    fullReservoirLevel: frl,
+    frlFt: frl,
+    storage,
+    storageMcft: storage,
+    capacity,
+    inflow,
+    inflowCusecs: inflow,
+    outflow,
+    outflowCusecs: outflow,
+    lastUpdated: dam.lastUpdated || new Date().toISOString(),
+  };
+}
+
 export function getDamStatus(dam) {
-  const fillPercentage = (dam.currentLevel / dam.fullReservoirLevel) * 100;
+  if (!dam) return { label: 'Normal', color: 'cyan', severity: 'normal' };
+  const current = Number(dam.currentLevel ?? dam.currentLevelFt ?? 0);
+  const frl = Number(dam.fullReservoirLevel ?? dam.frlFt ?? 100);
+  const fillPercentage = frl > 0 ? (current / frl) * 100 : 0;
 
   if (fillPercentage >= 90) return { label: 'Critical High', color: 'red', severity: 'high' };
   if (fillPercentage >= 75) return { label: 'High', color: 'orange', severity: 'elevated' };
@@ -225,18 +260,29 @@ export function getDamStatus(dam) {
 }
 
 export function calculateFillPercentage(dam) {
-  return ((dam.currentLevel / dam.fullReservoirLevel) * 100).toFixed(1);
+  if (!dam) return '0.0';
+  const current = Number(dam.currentLevel ?? dam.currentLevelFt ?? 0);
+  const frl = Number(dam.fullReservoirLevel ?? dam.frlFt ?? 100);
+  if (!frl || isNaN(current) || isNaN(frl)) return '0.0';
+  return Math.min(100, Math.max(0, (current / frl) * 100)).toFixed(1);
 }
 
 export function formatLastUpdated(timestamp) {
-  const date = new Date(timestamp);
-  return date.toLocaleString('en-IN', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true,
-    timeZone: 'Asia/Kolkata'
-  });
+  if (!timestamp) return 'Live Telemetry';
+  try {
+    const date = new Date(timestamp);
+    if (isNaN(date.getTime())) return String(timestamp);
+    return date.toLocaleString('en-IN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+      timeZone: 'Asia/Kolkata'
+    });
+  } catch (e) {
+    return String(timestamp);
+  }
 }
+

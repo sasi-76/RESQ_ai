@@ -1,27 +1,35 @@
 import { useState, useEffect } from 'react';
 import { Droplets, TrendingUp, TrendingDown, Clock, RefreshCw, AlertTriangle, Waves } from 'lucide-react';
-import { tnDamData, getDamStatus, calculateFillPercentage, formatLastUpdated } from '../data/damData';
+import { tnDamData, getDamStatus, calculateFillPercentage, formatLastUpdated, normalizeDam } from '../data/damData';
 
 const REFRESH_INTERVAL = 3600000; // 1 hour in milliseconds
 const HEARTBEAT_INTERVAL = 30000; // 30 seconds
 
 export default function Dams() {
   const [dams, setDams] = useState(() => {
-    const cached = localStorage.getItem('resqai_dams_real_v2');
-    if (cached) {
-      try {
+    try {
+      const cached = localStorage.getItem('resqai_dams_real_v2');
+      if (cached) {
         const parsed = JSON.parse(cached);
-        return parsed;
-      } catch (e) {
-        return tnDamData;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map(d => normalizeDam(d) || d);
+        }
       }
+    } catch (e) {
+      console.warn('Failed to parse cached dams', e);
     }
-    return tnDamData;
+    return tnDamData.map(d => normalizeDam(d) || d);
   });
 
   const [lastSync, setLastSync] = useState(() => {
-    const cached = localStorage.getItem('resqai_dams_last_sync');
-    return cached ? new Date(cached) : new Date();
+    try {
+      const cached = localStorage.getItem('resqai_dams_last_sync');
+      if (cached) {
+        const d = new Date(cached);
+        if (!isNaN(d.getTime())) return d;
+      }
+    } catch (e) {}
+    return new Date();
   });
 
   const [nextRefreshIn, setNextRefreshIn] = useState(REFRESH_INTERVAL);
@@ -36,14 +44,16 @@ export default function Dams() {
 
     // In production, this would fetch from TN WRD API
     // For now, we refresh with the static data + small variations
-    const refreshedData = tnDamData.map(dam => ({
-      ...dam,
-      lastUpdated: new Date().toISOString(),
-      // Add small random variations to simulate real-time changes
-      inflow: Math.max(0, dam.inflow + Math.floor(Math.random() * 200 - 100)),
-      outflow: Math.max(0, dam.outflow + Math.floor(Math.random() * 200 - 100)),
-      currentLevel: Number((dam.currentLevel + (Math.random() * 0.2 - 0.1)).toFixed(2))
-    }));
+    const refreshedData = tnDamData.map(dam => {
+      const norm = normalizeDam(dam) || dam;
+      return {
+        ...norm,
+        lastUpdated: new Date().toISOString(),
+        inflow: Math.max(0, norm.inflow + Math.floor(Math.random() * 200 - 100)),
+        outflow: Math.max(0, norm.outflow + Math.floor(Math.random() * 200 - 100)),
+        currentLevel: Number((norm.currentLevel + (Math.random() * 0.2 - 0.1)).toFixed(2))
+      };
+    });
 
     setDams(refreshedData);
     const now = new Date();
@@ -55,6 +65,7 @@ export default function Dams() {
 
     setIsSyncing(false);
   };
+
 
   // Hourly auto-refresh with background wakeup detection
   useEffect(() => {
@@ -144,7 +155,7 @@ export default function Dams() {
                 </span>
               </div>
               <p className="text-xs text-gray-400 mt-0.5">
-                Last Bulletin Sync: {formatLastUpdated(lastSync.toISOString())} IST
+                Last Bulletin Sync: {formatLastUpdated(lastSync instanceof Date && !isNaN(lastSync.getTime()) ? lastSync.toISOString() : new Date().toISOString())} IST
               </p>
             </div>
           </div>
@@ -177,6 +188,12 @@ export default function Dams() {
         {dams.map(dam => {
           const status = getDamStatus(dam);
           const fillPct = calculateFillPercentage(dam);
+          const currentLvl = dam.currentLevel ?? dam.currentLevelFt ?? 0;
+          const frlLvl = dam.fullReservoirLevel ?? dam.frlFt ?? 100;
+          const storageVal = Number(dam.storage ?? dam.storageMcft ?? 0);
+          const capacityVal = Number(dam.capacity ?? dam.storageMcft ?? 0);
+          const inflowVal = Number(dam.inflow ?? dam.inflowCusecs ?? 0);
+          const outflowVal = Number(dam.outflow ?? dam.outflowCusecs ?? 0);
 
           return (
             <div
@@ -207,8 +224,8 @@ export default function Dams() {
               {/* Water Level Bar */}
               <div className="mb-4">
                 <div className="flex items-end justify-between mb-2">
-                  <span className="text-3xl font-bold text-white">{dam.currentLevel} ft</span>
-                  <span className="text-sm text-gray-400">/ {dam.fullReservoirLevel} ft FRL</span>
+                  <span className="text-3xl font-bold text-white">{currentLvl} ft</span>
+                  <span className="text-sm text-gray-400">/ {frlLvl} ft FRL</span>
                 </div>
                 <div className="relative h-3 rounded-full bg-slate-700 overflow-hidden">
                   <div
@@ -221,13 +238,13 @@ export default function Dams() {
                         ? 'bg-yellow-500'
                         : 'bg-cyan-500'
                     }`}
-                    style={{ width: `${fillPct}%` }}
+                    style={{ width: `${Math.min(100, Math.max(0, Number(fillPct) || 0))}%` }}
                   />
                 </div>
                 <div className="flex justify-between items-center mt-1">
                   <span className="text-xs text-gray-400">{fillPct}% Full</span>
                   <span className="text-xs text-gray-400">
-                    {dam.storage.toLocaleString()} / {dam.capacity.toLocaleString()} mcft
+                    {storageVal.toLocaleString()} / {capacityVal.toLocaleString()} mcft
                   </span>
                 </div>
               </div>
@@ -240,7 +257,7 @@ export default function Dams() {
                     <span className="text-xs text-gray-400">Inflow</span>
                   </div>
                   <p className="text-xl font-bold text-white">
-                    {dam.inflow.toLocaleString()}
+                    {inflowVal.toLocaleString()}
                   </p>
                   <p className="text-xs text-gray-400">cusecs</p>
                 </div>
@@ -251,7 +268,7 @@ export default function Dams() {
                     <span className="text-xs text-gray-400">Outflow</span>
                   </div>
                   <p className="text-xl font-bold text-white">
-                    {dam.outflow.toLocaleString()}
+                    {outflowVal.toLocaleString()}
                   </p>
                   <p className="text-xs text-gray-400">cusecs</p>
                 </div>
@@ -285,7 +302,7 @@ export default function Dams() {
             <div>
               <p className="text-sm text-gray-400">Average Fill Level</p>
               <p className="text-2xl font-bold text-white">
-                {(dams.reduce((acc, dam) => acc + parseFloat(calculateFillPercentage(dam)), 0) / dams.length).toFixed(1)}%
+                {(dams.reduce((acc, dam) => acc + (parseFloat(calculateFillPercentage(dam)) || 0), 0) / (dams.length || 1)).toFixed(1)}%
               </p>
             </div>
           </div>

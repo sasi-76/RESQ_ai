@@ -23,7 +23,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { searchLocations, analyzeLocationRisk } from '../services/locationService';
 import { fetchRealtimeWeather } from '../services/weatherService';
-import { tnDamData } from '../data/damData';
+import { tnDamData, normalizeDam } from '../data/damData';
 
 const priorityColors = { P1: '#ef4444', P2: '#f97316', P3: '#eab308', P4: '#3b82f6' };
 
@@ -58,6 +58,7 @@ function MapView() {
   const [autoFollowGps, setAutoFollowGps] = useState(true);
 
   const [map, setMap] = useState(null);
+  const mapInstanceRef = useRef(null);
   const [selectedEntity, setSelectedEntity] = useState(null);
   const [leafletLib, setLeafletLib] = useState(null);
 
@@ -156,20 +157,32 @@ function MapView() {
 
   // Initialize Leaflet Map
   useEffect(() => {
+    let isMounted = true;
     if (typeof window !== 'undefined') {
       import('leaflet').then((L) => {
+        if (!isMounted) return;
         setLeafletLib(L);
 
-        const container = L.DomUtil.get('map-container');
-        if (container != null) {
+        const container = document.getElementById('map-container');
+        if (!container) return;
+
+        if (mapInstanceRef.current) {
+          try {
+            mapInstanceRef.current.remove();
+          } catch (e) {}
+          mapInstanceRef.current = null;
+        }
+        if (container._leaflet_id) {
           container._leaflet_id = null;
         }
 
         // Center on South India (Tamil Nadu, Karnataka, Andhra Pradesh)
-        const initialLat = userLocation?.lat || 12.5;
-        const initialLng = userLocation?.lng || 78.0;
+        const initialLat = Number(userLocation?.lat) || 12.5;
+        const initialLng = Number(userLocation?.lng) || 78.0;
 
-        const mapInstance = L.map('map-container').setView([initialLat, initialLng], 7);
+        const mapInstance = L.map(container, {
+          zoomControl: false,
+        }).setView([initialLat, initialLng], 7);
 
         // OpenStreetMap tiles
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -193,13 +206,20 @@ function MapView() {
         layerGroupsRef.current.userMarker = L.layerGroup().addTo(mapInstance);
         layerGroupsRef.current.searchMarker = L.layerGroup().addTo(mapInstance);
 
+        mapInstanceRef.current = mapInstance;
         setMap(mapInstance);
+      }).catch((err) => {
+        console.error('Leaflet failed to load:', err);
       });
     }
 
     return () => {
-      if (map) {
-        map.remove();
+      isMounted = false;
+      if (mapInstanceRef.current) {
+        try {
+          mapInstanceRef.current.remove();
+        } catch (e) {}
+        mapInstanceRef.current = null;
       }
     };
   }, []);
@@ -210,9 +230,9 @@ function MapView() {
     const group = layerGroupsRef.current.userMarker;
     group.clearLayers();
 
-    const lat = userLocation.lat;
-    const lng = userLocation.lng;
-    if (!lat || !lng) return;
+    const lat = Number(userLocation?.lat);
+    const lng = Number(userLocation?.lng);
+    if (!lat || !lng || isNaN(lat) || isNaN(lng)) return;
 
     // 1. Draw Breadcrumb Trail (past locations while moving)
     if (gpsTrackerTelemetry?.breadcrumbs?.length > 1) {
@@ -716,16 +736,28 @@ function MapView() {
     try {
       const cached = localStorage.getItem('resqai_dams_real_v2');
       if (cached) {
-        damsData = JSON.parse(cached);
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          damsData = parsed.map(d => normalizeDam(d) || d);
+        } else {
+          damsData = tnDamData.map(d => normalizeDam(d) || d);
+        }
       } else {
-        damsData = tnDamData;
+        damsData = tnDamData.map(d => normalizeDam(d) || d);
       }
     } catch (e) {
-      damsData = tnDamData;
+      damsData = tnDamData.map(d => normalizeDam(d) || d);
     }
 
-    damsData.forEach((dam) => {
-      const fillPct = ((dam.currentLevel / dam.fullReservoirLevel) * 100);
+    damsData.forEach((rawDam) => {
+      const dam = normalizeDam(rawDam) || rawDam;
+      const lat = Number(dam.latitude ?? dam.lat);
+      const lng = Number(dam.longitude ?? dam.lng);
+      if (isNaN(lat) || isNaN(lng)) return;
+
+      const currentLvl = Number(dam.currentLevel ?? dam.currentLevelFt ?? 0);
+      const frlLvl = Number(dam.fullReservoirLevel ?? dam.frlFt ?? 100);
+      const fillPct = frlLvl > 0 ? (currentLvl / frlLvl) * 100 : 0;
       const color = fillPct >= 75 ? '#ef4444' : fillPct >= 50 ? '#eab308' : '#06b6d4';
 
       const icon = leafletLib.divIcon({
@@ -752,14 +784,14 @@ function MapView() {
         iconAnchor: [16, 16],
       });
 
-      const marker = leafletLib.marker([dam.latitude, dam.longitude], { icon }).addTo(group);
+      const marker = leafletLib.marker([lat, lng], { icon }).addTo(group);
       marker.bindPopup(`
         <div style="font-family: Inter, sans-serif; min-width: 220px; background: #1e293b; padding: 12px; border-radius: 8px; border: 2px solid ${color};">
           <strong style="font-size: 14px; color: #ffffff; display: block; margin-bottom: 8px;">💧 ${dam.name}</strong>
           <div style="color: #e2e8f0; font-size: 12px; line-height: 1.8;">
             <div style="margin-bottom: 4px;"><strong style="color: #ffffff;">River:</strong> <span style="color: #22d3ee;">${dam.river}</span></div>
-            <div style="margin-bottom: 4px;"><strong style="color: #ffffff;">Current Level:</strong> <span style="color: ${color}; font-weight: bold;">${dam.currentLevel} ft</span></div>
-            <div style="margin-bottom: 4px;"><strong style="color: #ffffff;">Full Level:</strong> <span style="color: #94a3b8;">${dam.fullReservoirLevel} ft</span></div>
+            <div style="margin-bottom: 4px;"><strong style="color: #ffffff;">Current Level:</strong> <span style="color: ${color}; font-weight: bold;">${currentLvl} ft</span></div>
+            <div style="margin-bottom: 4px;"><strong style="color: #ffffff;">Full Level:</strong> <span style="color: #94a3b8;">${frlLvl} ft</span></div>
             <div style="margin-bottom: 4px;"><strong style="color: #ffffff;">Fill:</strong> <span style="color: ${color}; font-weight: bold; font-size: 14px;">${fillPct.toFixed(1)}%</span></div>
             <div><strong style="color: #ffffff;">Status:</strong> ${fillPct >= 75 ? '<span style="color: #ef4444;">🔴 High</span>' : fillPct >= 50 ? '<span style="color: #eab308;">🟡 Normal</span>' : '<span style="color: #06b6d4;">🔵 Low</span>'}</div>
           </div>
@@ -767,7 +799,7 @@ function MapView() {
       `);
 
       marker.on('click', () => {
-        setSelectedEntity({ type: 'dam', data: { ...dam, lat: dam.latitude, lng: dam.longitude } });
+        setSelectedEntity({ type: 'dam', data: { ...dam, lat, lng } });
       });
     });
   }, [map, leafletLib, showDams]);
@@ -1388,7 +1420,7 @@ function MapView() {
                   <button
                     onClick={() => {
                       window.open(
-                        `https://www.google.com/maps/dir/?api=1&origin=${userLocation.lat},${userLocation.lng}&destination=${selectedEntity.data.lat},${selectedEntity.data.lng}`,
+                        `https://www.google.com/maps/dir/?api=1&origin=${userLocation?.lat || 13.0827},${userLocation?.lng || 80.2707}&destination=${selectedEntity.data.lat},${selectedEntity.data.lng}`,
                         '_blank'
                       );
                     }}
