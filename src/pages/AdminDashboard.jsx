@@ -9,65 +9,49 @@ const workflowSteps = [
     step: 1,
     name: 'Data Collection',
     status: 'active',
-    sources: 6,
-    lastUpdate: '30 sec ago',
-    description: 'Collecting real-time data from sensors, satellites, and APIs',
+    description: 'Real-time sensor & satellite data ingestion',
   },
   {
     step: 2,
     name: 'Data Processing',
     status: 'active',
-    processed: 1247,
-    lastUpdate: '5 sec ago',
-    description: 'Cleaning, normalizing, and standardizing incoming data',
+    description: 'Cleaning and normalizing incoming data',
   },
   {
     step: 3,
     name: 'Hazard Detection',
     status: 'active',
-    detected: 4,
-    lastUpdate: '2 min ago',
-    description: 'AI models analyzing data for hazard patterns and anomalies',
+    description: 'AI models analyzing hazard patterns',
   },
   {
     step: 4,
     name: 'Risk Assessment',
     status: 'active',
-    calculated: 6,
-    lastUpdate: '3 min ago',
-    description: 'Calculating risk percentages and priority levels for each area',
+    description: 'Calculating risk levels for each area',
   },
   {
     step: 5,
     name: 'Change Detection',
     status: 'active',
-    changes: 2,
-    lastUpdate: '5 min ago',
-    description: 'Comparing current vs historical data to detect significant changes',
+    description: 'Detecting significant data changes',
   },
   {
     step: 6,
     name: 'Alert Generation',
     status: 'active',
-    generated: 4,
-    lastUpdate: '10 min ago',
-    description: 'Creating alerts based on risk thresholds and priority rules',
+    description: 'Creating priority-based alerts',
   },
   {
     step: 7,
     name: 'Resource Optimization',
     status: 'active',
-    recommendations: 6,
-    lastUpdate: '15 min ago',
-    description: 'Recommending team deployments and resource allocation',
+    description: 'Recommending team deployments',
   },
   {
     step: 8,
     name: 'Controller Review',
     status: 'waiting',
-    pending: 1,
-    lastUpdate: 'Now',
-    description: 'Awaiting human approval for AI-generated decisions',
+    description: 'Awaiting human approval',
   },
 ];
 
@@ -196,17 +180,8 @@ function AdminDashboard() {
                   {step.status === 'active' && <Activity className="h-4 w-4 text-blue-400 animate-pulse" />}
                   {step.status === 'waiting' && <Clock className="h-4 w-4 text-yellow-400" />}
                 </div>
-                <h4 className="text-base font-bold text-white mb-3">{step.name}</h4>
-                <div className="text-sm font-semibold text-cyan-400">
-                  {step.sources && `${step.sources} sources`}
-                  {step.processed && `${step.processed} records`}
-                  {step.detected && `${step.detected} detected`}
-                  {step.calculated && `${step.calculated} areas`}
-                  {step.changes && `${step.changes} changes`}
-                  {step.generated && `${step.generated} alerts`}
-                  {step.recommendations && `${step.recommendations} actions`}
-                  {step.pending && `${step.pending} pending`}
-                </div>
+                <h4 className="text-lg font-bold text-white mb-2">{step.name}</h4>
+                <p className="text-xs text-slate-400">{step.description}</p>
               </div>
               {idx < workflowSteps.length - 1 && (
                 <div className="hidden md:block absolute top-1/2 -right-2 transform -translate-y-1/2 z-10">
