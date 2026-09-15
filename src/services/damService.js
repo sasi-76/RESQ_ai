@@ -153,3 +153,39 @@ export function sendCausewaySafetyWhatsApp(dam, causewayName, recipientPhone = E
 
   openWhatsApp(recipientPhone, msg);
 }
+
+/**
+ * Format milliseconds remaining into MM:SS countdown format
+ */
+export function formatSyncCountdown(msRemaining) {
+  if (msRemaining <= 0) return '00:00';
+  const totalSeconds = Math.floor(msRemaining / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+/**
+ * Get next hourly sync information
+ */
+export function getNextSyncInfo(lastSyncTimestamp, cycleMs = 3600000) {
+  const now = Date.now();
+  const nextSyncTime = (lastSyncTimestamp || now) + cycleMs;
+  const timeRemainingMs = Math.max(0, nextSyncTime - now);
+  
+  const lastSyncDate = new Date(lastSyncTimestamp || now);
+  const lastSyncFormatted = lastSyncDate.toLocaleTimeString('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  });
+
+  return {
+    lastSyncTime: lastSyncTimestamp || now,
+    lastSyncFormatted,
+    nextSyncTime,
+    timeRemainingMs,
+    countdownStr: formatSyncCountdown(timeRemainingMs),
+  };
+}
