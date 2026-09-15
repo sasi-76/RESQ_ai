@@ -189,6 +189,8 @@ function Dashboard() {
     teams,
     hospitals,
     rawHospitals,
+    dams,
+    getDamStats,
     alerts: contextAlerts,
     monitoredAreas: contextAreas,
     getStats,
@@ -2428,6 +2430,81 @@ function Dashboard() {
       <div className="relative z-10 space-y-6">
         <LiveDataDashboard />
         <ResourceTracker />
+
+        {/* ── STATE DAM & RESERVOIR WATER LEVEL TELEMETRY WIDGET ────────────── */}
+        <div className="glass-card p-5 border border-cyan-500/30">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <Waves className="h-5 w-5 text-cyan-400" />
+                <h3 className="text-base font-bold text-white tracking-tight">
+                  Tamil Nadu Reservoir &amp; Dam Water Levels
+                </h3>
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                  LIVE TN-WRD
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Real-time storage percentage, spillway discharge cusecs &amp; downstream flood surge alerts
+              </p>
+            </div>
+
+            <Link
+              to="/dams"
+              className="px-3.5 py-1.5 rounded-xl bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-300 hover:text-white border border-cyan-500/40 text-xs font-bold flex items-center gap-1.5 transition-all self-start sm:self-center shrink-0"
+            >
+              <span>Full Dam Operations Center</span>
+              <ArrowUpRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+
+          {/* 4 Quick Reservoir Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+            {(dams || []).slice(0, 4).map((dam) => {
+              const fillPct = ((dam.currentLevelFt / dam.frlFt) * 100).toFixed(1);
+              const isHigh = dam.status === 'HIGH_ALERT' || dam.status === 'CRITICAL_SURGE';
+              const color = isHigh ? 'text-red-400' : 'text-cyan-400';
+              const barColor = isHigh ? 'bg-red-500' : 'bg-cyan-500';
+
+              return (
+                <div
+                  key={dam.id}
+                  className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-cyan-500/40 transition-all flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-1 mb-1">
+                      <span className="font-bold text-white text-xs truncate">{dam.shortName} Dam</span>
+                      <span
+                        className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded uppercase ${
+                          isHigh ? 'bg-red-500/20 text-red-300' : 'bg-cyan-500/20 text-cyan-300'
+                        }`}
+                      >
+                        {fillPct}% FRL
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 truncate">{dam.river} Basin • {dam.district}</p>
+
+                    <div className="w-full bg-slate-800 rounded-full h-1.5 mt-2.5 overflow-hidden">
+                      <div className={`h-1.5 rounded-full ${barColor}`} style={{ width: `${Math.min(Number(fillPct), 100)}%` }} />
+                    </div>
+
+                    <div className="flex items-center justify-between text-[10px] text-slate-400 mt-2">
+                      <span>Level: <strong className="text-white">{dam.currentLevelFt}</strong> / {dam.frlFt} ft</span>
+                      <span>Outflow: <strong className={color}>{dam.outflowCusecs.toLocaleString()}</strong> cusecs</span>
+                    </div>
+                  </div>
+
+                  {dam.transitSchedule?.[0] && (
+                    <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[9px] text-slate-400">
+                      <span className="truncate">➔ {dam.transitSchedule[0].location}</span>
+                      <span className="font-mono text-orange-400 font-bold shrink-0">ETA ~{dam.transitSchedule[0].peakEta}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════════ */}

@@ -4,6 +4,7 @@ import Layout from './components/Layout/Layout';
 import Dashboard from './pages/Dashboard';
 import Alerts from './pages/Alerts';
 import MapView from './pages/MapView';
+import Dams from './pages/Dams';
 import Hospitals from './pages/Hospitals';
 import Teams from './pages/Teams';
 import Recommendations from './pages/Recommendations';
@@ -25,6 +26,7 @@ function App() {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/alerts" element={<Alerts />} />
             <Route path="/map" element={<MapView />} />
+            <Route path="/dams" element={<Dams />} />
             <Route path="/hospitals" element={<Hospitals />} />
             <Route path="/teams" element={<Teams />} />
             <Route path="/tasks" element={<FieldTasks />} />

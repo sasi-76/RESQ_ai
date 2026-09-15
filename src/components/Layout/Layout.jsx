@@ -17,12 +17,14 @@ import {
   FileText,
   RotateCcw,
   Radio,
+  Waves,
 } from 'lucide-react';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/alerts', icon: Bell, label: 'Alerts' },
   { to: '/map', icon: Map, label: 'Map' },
+  { to: '/dams', icon: Waves, label: 'Dams & Reservoirs' },
   { to: '/hospitals', icon: Building2, label: 'Hospitals' },
   { to: '/teams', icon: Users, label: 'Teams' },
   { to: '/tasks', icon: CheckSquare, label: 'Field Tasks' },
@@ -94,7 +96,7 @@ function Layout({ children }) {
         <div className="w-10 border-t border-slate-700/50 mb-2" />
 
         {/* Nav Items */}
-        <nav className="flex flex-col items-center gap-1 flex-1">
+        <nav className="flex flex-col items-center gap-1 flex-1 overflow-y-auto overflow-x-hidden scrollbar-none py-0.5">
           {navItems.map(({ to, icon: Icon, label }) => {
             const isActive =
               to === '/'

@@ -1,4 +1,6 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import {
   Map,
   MapPin,
@@ -19,6 +21,7 @@ import {
   CloudRain,
   Wind,
   Droplets,
+  Maximize2,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { searchLocations, analyzeLocationRisk } from '../services/locationService';
@@ -38,6 +41,7 @@ function MapView() {
     disasters,
     teams,
     hospitals,
+    dams,
     monitoredAreas: liveAreas,
     userLocation,
     detectUserLocation,
@@ -51,11 +55,12 @@ function MapView() {
     simulateGpsMovement,
   } = useApp();
 
-  const [autoFollowGps, setAutoFollowGps] = useState(true);
+  const [autoFollowGps, setAutoFollowGps] = useState(false);
 
   const [map, setMap] = useState(null);
+  const mapRef = useRef(null);
   const [selectedEntity, setSelectedEntity] = useState(null);
-  const [leafletLib, setLeafletLib] = useState(null);
+  const [leafletLib, setLeafletLib] = useState(L);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -120,6 +125,7 @@ function MapView() {
   const [showTeams, setShowTeams] = useState(true);
   const [showHospitals, setShowHospitals] = useState(true);
   const [showZones, setShowZones] = useState(true);
+  const [showDams, setShowDams] = useState(true);
 
   // Layer groups refs
   const layerGroupsRef = useRef({
@@ -127,6 +133,7 @@ function MapView() {
     disasters: null,
     teams: null,
     hospitals: null,
+    dams: null,
     userMarker: null,
     searchMarker: null,
   });
@@ -148,50 +155,87 @@ function MapView() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Initialize Leaflet Map
+  // Initialize Leaflet Map with Google Maps-like Hold & Drag behavior
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      import('leaflet').then((L) => {
-        setLeafletLib(L);
+    const container = document.getElementById('map-container');
+    if (!container) return;
 
-        const container = L.DomUtil.get('map-container');
-        if (container != null) {
-          container._leaflet_id = null;
-        }
-
-        const initialLat = userLocation?.lat || 11.1271;
-        const initialLng = userLocation?.lng || 78.6569;
-
-        const mapInstance = L.map('map-container').setView([initialLat, initialLng], 9);
-
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '© OpenStreetMap contributors',
-          maxZoom: 19,
-        }).addTo(mapInstance);
-
-        // Pause auto-follow when user drags or zooms the map manually
-        mapInstance.on('movestart', (e) => {
-          if (e.originalEvent) {
-            setAutoFollowGps(false);
-          }
-        });
-
-        // Initialize layer groups
-        layerGroupsRef.current.zones = L.layerGroup().addTo(mapInstance);
-        layerGroupsRef.current.disasters = L.layerGroup().addTo(mapInstance);
-        layerGroupsRef.current.teams = L.layerGroup().addTo(mapInstance);
-        layerGroupsRef.current.hospitals = L.layerGroup().addTo(mapInstance);
-        layerGroupsRef.current.userMarker = L.layerGroup().addTo(mapInstance);
-        layerGroupsRef.current.searchMarker = L.layerGroup().addTo(mapInstance);
-
-        setMap(mapInstance);
-      });
+    // Clean up any stale map instance on this element
+    if (mapRef.current) {
+      mapRef.current.remove();
+      mapRef.current = null;
+    }
+    if (container._leaflet_id) {
+      container._leaflet_id = null;
     }
 
+    const initialLat = userLocation?.lat || 11.1271;
+    const initialLng = userLocation?.lng || 78.6569;
+
+    const mapInstance = L.map(container, {
+      center: [initialLat, initialLng],
+      zoom: 8,
+      minZoom: 3,
+      maxZoom: 19,
+      dragging: true,
+      tap: false, // Prevents simulated tap from blocking mouse drag on touch laptops & Chromium
+      touchZoom: true,
+      scrollWheelZoom: true,
+      doubleClickZoom: true,
+      boxZoom: true,
+      keyboard: true,
+      inertia: true,
+      inertiaDeceleration: 3000,
+      inertiaMaxSpeed: 2000,
+      easeLinearity: 0.2,
+      worldCopyJump: true,
+    });
+
+    // Explicitly guarantee dragging is active
+    mapInstance.dragging.enable();
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors',
+      maxZoom: 19,
+    }).addTo(mapInstance);
+
+    // Pause auto-follow whenever the user drags, moves or zooms the map manually
+    const cancelAutoFollow = () => {
+      setAutoFollowGps(false);
+    };
+
+    mapInstance.on('dragstart', cancelAutoFollow);
+    mapInstance.on('drag', cancelAutoFollow);
+    mapInstance.on('movestart', cancelAutoFollow);
+    mapInstance.on('zoomstart', cancelAutoFollow);
+    mapInstance.on('mousedown', cancelAutoFollow);
+    mapInstance.on('touchstart', cancelAutoFollow);
+
+    // Initialize layer groups
+    layerGroupsRef.current.zones = L.layerGroup().addTo(mapInstance);
+    layerGroupsRef.current.disasters = L.layerGroup().addTo(mapInstance);
+    layerGroupsRef.current.teams = L.layerGroup().addTo(mapInstance);
+    layerGroupsRef.current.hospitals = L.layerGroup().addTo(mapInstance);
+    layerGroupsRef.current.dams = L.layerGroup().addTo(mapInstance);
+    layerGroupsRef.current.userMarker = L.layerGroup().addTo(mapInstance);
+    layerGroupsRef.current.searchMarker = L.layerGroup().addTo(mapInstance);
+
+    mapRef.current = mapInstance;
+    setLeafletLib(L);
+    setMap(mapInstance);
+
+    // Invalidate size once DOM has fully settled to ensure smooth dragging & tile alignment
+    const timer = setTimeout(() => {
+      mapInstance.invalidateSize();
+    }, 200);
+
     return () => {
-      if (map) {
-        map.remove();
+      clearTimeout(timer);
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
       }
+      setMap(null);
     };
   }, []);
 
@@ -205,7 +249,7 @@ function MapView() {
     const lng = userLocation.lng;
     if (!lat || !lng) return;
 
-    // 1. Draw Breadcrumb Trail (past locations while moving)
+    // 1. Draw Breadcrumb Trail (past locations while moving) - non-interactive so dragging is never blocked
     if (gpsTrackerTelemetry?.breadcrumbs?.length > 1) {
       const trailPoints = gpsTrackerTelemetry.breadcrumbs.map((b) => [b.lat, b.lng]);
       leafletLib.polyline(trailPoints, {
@@ -213,10 +257,11 @@ function MapView() {
         weight: 3,
         opacity: 0.75,
         dashArray: '6, 6',
+        interactive: false,
       }).addTo(group);
     }
 
-    // 2. Draw Accuracy Radius Circle
+    // 2. Draw Accuracy Radius Circle - non-interactive so dragging is never blocked
     leafletLib.circle([lat, lng], {
       radius: Math.min(userLocation.accuracy || 25, 2000),
       color: '#06b6d4',
@@ -224,6 +269,7 @@ function MapView() {
       fillOpacity: 0.12,
       weight: 1.5,
       dashArray: '4, 4',
+      interactive: false,
     }).addTo(group);
 
     // 3. Draw Pulsing Radar Beacon
@@ -413,12 +459,14 @@ function MapView() {
         setSelectedEntity({ type: 'area', data: area });
       });
 
+      // Non-interactive circle so users can hold and drag right through it smoothly like Google Maps
       leafletLib.circle([area.lat, area.lng], {
         color,
         fillColor: color,
         fillOpacity: 0.12,
         radius,
         weight: 1.5,
+        interactive: false,
       }).addTo(group);
     });
   }, [map, leafletLib, liveAreas, showZones]);
@@ -498,6 +546,7 @@ function MapView() {
         setSelectedEntity({ type: 'disaster', data: disaster });
       });
 
+      // Non-interactive hazard radius circle so map can be dragged smoothly
       leafletLib.circle([disaster.lat, disaster.lng], {
         color: severityColor,
         fillColor: severityColor,
@@ -505,6 +554,7 @@ function MapView() {
         radius: 12000,
         weight: 2,
         dashArray: '4, 4',
+        interactive: false,
       }).addTo(group);
     });
   }, [map, leafletLib, disasters, showDisasters]);
@@ -623,17 +673,157 @@ function MapView() {
     });
   }, [map, leafletLib, hospitals, showHospitals]);
 
+  // Update Dams & Reservoirs Layer
+  useEffect(() => {
+    if (!map || !leafletLib || !layerGroupsRef.current.dams) return;
+    const group = layerGroupsRef.current.dams;
+    group.clearLayers();
+
+    if (!showDams || !dams?.length) return;
+
+    dams.forEach((dam) => {
+      const fillPct = ((dam.currentLevelFt / dam.frlFt) * 100).toFixed(1);
+      const isCritical = dam.status === 'CRITICAL_SURGE';
+      const isHighAlert = dam.status === 'HIGH_ALERT';
+      const damColor = isCritical ? '#ef4444' : isHighAlert ? '#f97316' : '#06b6d4';
+
+      const icon = leafletLib.divIcon({
+        className: 'dam-marker',
+        html: `
+          <div style="position: relative; display: flex; flex-direction: column; align-items: center;">
+            <div style="
+              width: 38px;
+              height: 38px;
+              background: #0f172a;
+              border: 3px solid ${damColor};
+              border-radius: 50%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 16px;
+              box-shadow: 0 0 16px ${damColor}80, 0 4px 12px rgba(0,0,0,0.6);
+              animation: ${isCritical ? 'pulse 1.2s infinite' : 'none'};
+            ">
+              🌊
+            </div>
+            <div style="
+              margin-top: 2px;
+              background: #090d16;
+              border: 1px solid ${damColor}90;
+              color: #f8fafc;
+              font-family: Inter, sans-serif;
+              font-size: 9px;
+              font-weight: 800;
+              padding: 1px 5px;
+              border-radius: 4px;
+              white-space: nowrap;
+              box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+              display: flex;
+              align-items: center;
+              gap: 3px;
+            ">
+              <span style="color:${damColor}; font-weight:900;">${fillPct}%</span>
+              <span>${dam.shortName}</span>
+            </div>
+          </div>
+        `,
+        iconSize: [60, 48],
+        iconAnchor: [30, 24],
+      });
+
+      const marker = leafletLib.marker([dam.lat, dam.lng], { icon }).addTo(group);
+
+      marker.bindPopup(`
+        <div style="font-family: Inter, sans-serif; min-width: 250px; padding: 2px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #334155; padding-bottom: 6px; margin-bottom: 6px;">
+            <div>
+              <span style="font-size: 10px; font-weight: 800; color: #06b6d4; text-transform: uppercase;">🌊 State Reservoir</span>
+              <div style="font-weight: 800; font-size: 14px; color: #0f172a;">${dam.name}</div>
+            </div>
+            <span style="background: ${damColor}20; color: ${damColor}; border: 1px solid ${damColor}40; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 800;">
+              ${dam.status.replace('_', ' ')}
+            </span>
+          </div>
+
+          <div style="font-size: 11px; color: #475569; line-height: 1.6; margin-bottom: 6px;">
+            <div><strong>River Basin:</strong> ${dam.river} (${dam.basin})</div>
+            <div><strong>Water Level:</strong> <span style="color: #0284c7; font-weight: bold;">${dam.currentLevelFt} ft</span> / ${dam.frlFt} ft FRL (<strong>${fillPct}% Full</strong>)</div>
+            <div><strong>Live Storage:</strong> <strong>${dam.storageTmc} TMC</strong> / ${dam.capacityTmc} TMC</div>
+            <div><strong>Spillway Discharge:</strong> <span style="color: #ea580c; font-weight: bold;">${dam.outflowCusecs.toLocaleString()} cusecs</span> (Inflow: ${dam.inflowCusecs.toLocaleString()})</div>
+            <div><strong>Sluice Gates:</strong> ${dam.openGates} of ${dam.spillwayGates} open</div>
+          </div>
+
+          ${
+            dam.transitSchedule?.length
+              ? `
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px; font-size: 10px; color: #334155; margin-top: 4px;">
+              <div style="font-weight: bold; color: #c2410c; margin-bottom: 2px;">⏱️ Flood Wave ETA:</div>
+              ${dam.transitSchedule
+                .slice(0, 2)
+                .map((t) => `<div>• <strong>${t.location}:</strong> ~${t.peakEta} (${t.distanceKm} km)</div>`)
+                .join('')}
+            </div>
+          `
+              : ''
+          }
+        </div>
+      `);
+
+      marker.on('click', () => {
+        setSelectedEntity({ type: 'dam', data: dam });
+      });
+
+      // Buffer circle around dam (non-interactive so map dragging is completely unobstructed)
+      leafletLib.circle([dam.lat, dam.lng], {
+        color: damColor,
+        fillColor: damColor,
+        fillOpacity: isCritical ? 0.2 : 0.1,
+        radius: 8000,
+        weight: 1.5,
+        dashArray: '4, 4',
+        interactive: false,
+      }).addTo(group);
+    });
+  }, [map, leafletLib, dams, showDams]);
+
+  // View All Monitored Areas & Sectors
+  const handleFitAllAreas = () => {
+    setAutoFollowGps(false);
+    if (!map) return;
+    const allCoords = [];
+    if (liveAreas?.length) {
+      liveAreas.forEach((a) => {
+        if (a.lat && a.lng) allCoords.push([a.lat, a.lng]);
+      });
+    }
+    if (disasters?.length) {
+      disasters.forEach((d) => {
+        if (d.lat && d.lng) allCoords.push([d.lat, d.lng]);
+      });
+    }
+    if (dams?.length) {
+      dams.forEach((dm) => {
+        if (dm.lat && dm.lng) allCoords.push([dm.lat, dm.lng]);
+      });
+    }
+    if (allCoords.length > 0) {
+      map.fitBounds(allCoords, { padding: [50, 50], maxZoom: 11, duration: 1.2 });
+    } else {
+      map.flyTo([11.05, 78.65], 7, { duration: 1.2 });
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header & Global Location Search Bar */}
+      {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-            <Map className="h-7 w-7 text-blue-400" />
-            Tactical GIS & Proximity Analyzer
-          </h2>
-          <p className="text-sm text-slate-400 mt-1">
-            Real-Time GPS Location Tracking, Global Geocoding & Emergency Reach Analysis
+          <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
+            <Map className="h-6 w-6 text-blue-500" />
+            Interactive Area Command &amp; GIS
+          </h1>
+          <p className="text-slate-400 text-xs mt-1">
+            Hold and drag anywhere to explore all areas. Real-time GIS monitoring for Tamil Nadu disaster sectors.
           </p>
         </div>
 
@@ -755,6 +945,17 @@ function MapView() {
           </button>
 
           <button
+            onClick={() => setShowDams(!showDams)}
+            className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
+              showDams
+                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+                : 'text-slate-500 hover:text-slate-300'
+            }`}
+          >
+            🌊 Dams ({dams?.length || 0})
+          </button>
+
+          <button
             onClick={() => setShowZones(!showZones)}
             className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
               showZones
@@ -797,9 +998,18 @@ function MapView() {
       {/* ── STATEWIDE TAMIL NADU & REGIONAL QUICK NAVIGATION TOOLBAR ────────── */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs scrollbar-none">
         <span className="text-slate-400 font-bold font-mono text-[11px] whitespace-nowrap flex items-center gap-1">
-          <Navigation className="h-3 w-3 text-cyan-400" /> Statewide Quick Jump:
+          <Navigation className="h-3 w-3 text-cyan-400" /> Navigation:
         </span>
         
+        <button
+          onClick={handleFitAllAreas}
+          className="px-3 py-1.5 rounded-lg bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-200 hover:text-white border border-cyan-500/50 font-bold flex items-center gap-1.5 whitespace-nowrap shadow-sm transition-all"
+          title="Zoom out and fit all monitored disaster zones on screen"
+        >
+          <Maximize2 className="h-3.5 w-3.5 text-cyan-300" />
+          <span>🌐 See All Areas</span>
+        </button>
+
         <button
           onClick={() => {
             setAutoFollowGps(false);
@@ -961,6 +1171,10 @@ function MapView() {
             <div className="flex items-center gap-1.5">
               <div className="w-3 h-3 rounded-full bg-emerald-500 border border-white" />
               <span>Medical Facility</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded-full bg-cyan-500 border border-white" />
+              <span>State Reservoir / Dam</span>
             </div>
             <div className="flex items-center gap-1.5">
               <div className="w-3 h-3 rounded-md bg-purple-600 border border-white" />

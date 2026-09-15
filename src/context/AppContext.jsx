@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { monitoredAreas, hospitals as initialHospitals, resqTeams, alerts as initialAlerts, initialAiDecisions } from '../data/mockData';
+import { INITIAL_DAMS } from '../data/damData';
+import { calculateDamAggregateStats, evaluateDamStatus } from '../services/damService';
 import { getUserCurrentLocation, calculateDistanceKm, calculateTransitEta, reverseGeocodeCoordinates } from '../services/locationService';
 import { sendCommanderAlert, sendCitizenAlert } from '../services/notificationService';
 
@@ -79,6 +81,22 @@ export const AppProvider = ({ children }) => {
       return initialHospitals;
     }
   });
+
+  // ── Dam & Reservoir Water Levels Telemetry ─────────────────────────────────
+  const [dams, setDams] = useState(() => {
+    try {
+      const saved = localStorage.getItem('resqai_dams');
+      return saved ? JSON.parse(saved) : INITIAL_DAMS;
+    } catch (e) {
+      return INITIAL_DAMS;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('resqai_dams', JSON.stringify(dams));
+    } catch (e) {}
+  }, [dams]);
 
   const [completedMissions, setCompletedMissions] = useState(() => {
     try {
@@ -885,6 +903,9 @@ export const AppProvider = ({ children }) => {
     ]);
     setSosBeacons([]);
 
+    localStorage.removeItem('resqai_dams');
+    setDams(INITIAL_DAMS);
+
     showNotification({
       id: Date.now(),
       type: 'system',
@@ -894,6 +915,98 @@ export const AppProvider = ({ children }) => {
       timestamp: new Date().toISOString(),
     });
   };
+
+  // ── Dam Operational Controls & Surge Simulations ─────────────────────────
+  const updateDamDischarge = (damId, outflowCusecs, openGates) => {
+    setDams((prevDams) =>
+      prevDams.map((d) => {
+        if (d.id !== damId) return d;
+        const updated = {
+          ...d,
+          outflowCusecs: Number(outflowCusecs),
+          openGates: openGates !== undefined ? Number(openGates) : d.openGates,
+        };
+        const evaluation = evaluateDamStatus(updated);
+        return {
+          ...updated,
+          status: evaluation.status,
+          statusLabel: evaluation.statusLabel,
+          riskLevel: evaluation.riskLevel,
+        };
+      })
+    );
+  };
+
+  const simulateDamSurge = (damId, additionalInflow = 25000) => {
+    setDams((prevDams) =>
+      prevDams.map((d) => {
+        if (d.id !== damId) return d;
+        const newInflow = d.inflowCusecs + additionalInflow;
+        const newOutflow = Math.min(d.outflowCusecs + Math.round(additionalInflow * 0.85), 160000);
+        const newLevel = Math.min(Number((d.currentLevelFt + 1.2).toFixed(1)), d.frlFt);
+        const newStorage = Math.min(Number((d.storageTmc + 2.1).toFixed(2)), d.capacityTmc);
+        const newOpenGates = Math.min(d.openGates + 3, d.spillwayGates);
+
+        const updated = {
+          ...d,
+          inflowCusecs: newInflow,
+          outflowCusecs: newOutflow,
+          currentLevelFt: newLevel,
+          storageTmc: newStorage,
+          openGates: newOpenGates,
+        };
+        const evaluation = evaluateDamStatus(updated);
+        const result = {
+          ...updated,
+          status: evaluation.status,
+          statusLabel: evaluation.statusLabel,
+          riskLevel: evaluation.riskLevel,
+        };
+
+        // Trigger Notification
+        showNotification({
+          id: Date.now(),
+          type: 'danger',
+          title: `🌊 ${d.shortName.toUpperCase()} SURGE DISCHARGE: ${newOutflow.toLocaleString()} cusecs`,
+          message: `Spillway opened to ${newOpenGates}/${d.spillwayGates} gates. Surge advancing towards ${d.transitSchedule[0]?.location || 'downstream taluks'}.`,
+          severity: 'critical',
+          timestamp: new Date().toISOString(),
+        });
+
+        // Add to active alerts
+        const surgeAlert = {
+          id: `dam-surge-${d.id}-${Date.now()}`,
+          title: `CRITICAL DAM SURGE: ${d.name}`,
+          message: `Heavy inflow surging at ${newInflow.toLocaleString()} cusecs. Emergency spillway release elevated to ${newOutflow.toLocaleString()} cusecs. Downstream taluks alerted: ${d.vulnerableTaluks.slice(0, 3).join(', ')}.`,
+          priority: 'P1',
+          severity: 'critical',
+          type: 'flood',
+          status: 'active',
+          timestamp: new Date().toISOString(),
+          damId: d.id,
+          source: 'TN WRD Hydrological Command',
+        };
+        setAlerts((curr) => [surgeAlert, ...curr]);
+
+        // Critical modal siren if high surge
+        if (newOutflow >= 35000 || evaluation.status === 'CRITICAL_SURGE') {
+          setCriticalAlert({
+            id: `dam-${d.id}-${Date.now()}`,
+            type: 'Dam Flood Surge',
+            areaName: `${d.name} (${d.district})`,
+            riskPercent: evaluation.riskLevel,
+            severity: 'critical',
+            lat: d.lat,
+            lng: d.lng,
+          });
+        }
+
+        return result;
+      })
+    );
+  };
+
+  const getDamStats = () => calculateDamAggregateStats(dams);
 
   const getFilteredAlerts = () => {
     if (alertFilter === 'all') return alerts;
@@ -1123,6 +1236,12 @@ export const AppProvider = ({ children }) => {
     getFilteredAiDecisions,
     getStats,
     getResourceStats,
+
+    // Dam & Hydro Telemetry
+    dams,
+    updateDamDischarge,
+    simulateDamSurge,
+    getDamStats,
 
     // Task management
     updateTaskStatus,

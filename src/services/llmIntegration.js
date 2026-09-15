@@ -515,18 +515,22 @@ export async function chatWithAIReasoning(message, contextData = {}) {
     sosBeacons = [],
     stats = {},
     completedMissions = [],
+    dams = [],
   } = contextData;
 
   const systemPrompt =
     'You are ResQ Copilot, an expert AI assistant specializing in disaster management and emergency response for Tamil Nadu, India. ' +
-    'You have access to real-time operational data. Provide clear, structured, and actionable answers. ' +
-    'Be concise but thorough. Use relevant emojis to improve readability. ' +
+    'You have access to real-time operational data including major Tamil Nadu dams (Mettur, Bhavanisagar, Vaigai, Chembarambakkam, etc.). ' +
+    'Provide clear, structured, and actionable answers. Be concise but thorough. Use relevant emojis to improve readability. ' +
     'Format responses with bullet points when listing items. Never include raw JSON in your answer.';
 
   const contextBlock = `
 === LIVE OPERATIONAL DATA ===
 Active Disasters: ${disasters.length}
 ${disasters.map(d => `  • ${d.type} at ${d.areaName} — Severity: ${d.severity}, Risk: ${d.riskPercent}%`).join('\n')}
+
+State Reservoirs & Major Dams: ${dams.length}
+${dams.map(d => `  • ${d.name} (${d.river}): ${d.currentLevelFt}/${d.frlFt} ft (${Math.round((d.currentLevelFt/d.frlFt)*100)}% Full), Outflow: ${d.outflowCusecs.toLocaleString()} cusecs, Status: ${d.status}, Downstream ETA: ${d.transitSchedule?.[0]?.peakEta || 'N/A'}`).join('\n')}
 
 Response Teams: ${teams.length} total
 ${teams.map(t => `  • ${t.name}: ${t.status} (${t.members} members)`).join('\n')}

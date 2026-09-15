@@ -34,10 +34,24 @@ body {
   background: #64748b;
 }
 
-/* Leaflet overrides */
-.leaflet-container {
+/* Leaflet & Google Maps style dragging overrides */
+.leaflet-container,
+#map-container {
   background: #1e293b !important;
   border-radius: 12px;
+  cursor: grab !important;
+  touch-action: none;
+}
+
+#map-container:active,
+.leaflet-container:active,
+.leaflet-container.leaflet-drag-target,
+.leaflet-dragging,
+.leaflet-dragging #map-container,
+.leaflet-dragging .leaflet-grab,
+.leaflet-dragging .leaflet-interactive,
+.leaflet-dragging * {
+  cursor: grabbing !important;
 }
 
 .leaflet-tile-pane {

@@ -152,7 +152,7 @@ function executeIntent(intent, actions, allTeams) {
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function ResQCopilot() {
   const {
-    disasters, teams, hospitals, sosBeacons, completedMissions, getStats,
+    disasters, teams, hospitals, sosBeacons, completedMissions, dams, getStats,
     deployTeam, recallTeam, resolveSOSBeacon, assignNearestTeamToSOS, removeDisaster,
     dispatchAmbulance, completeMission, showNotification, logAiAction
   } = useApp();
@@ -199,7 +199,7 @@ export default function ResQCopilot() {
 
     // 2. Get AI reply
     try {
-      const reply = await chatWithAIReasoning(text, { disasters, teams, hospitals, sosBeacons, stats, completedMissions });
+      const reply = await chatWithAIReasoning(text, { disasters, teams, hospitals, sosBeacons, stats, completedMissions, dams });
       const msgs = [{ id: Date.now() + 1, sender: "ai", text: reply, source: "reasoning", timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }];
       if (actionLabel) msgs.push({ id: Date.now() + 2, sender: "action", intent, label: actionLabel, waLinks, requireApproval, targetDisaster, timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) });
       setMessages((p) => [...p, ...msgs]);
@@ -218,7 +218,7 @@ export default function ResQCopilot() {
     setMessages((prev) => prev.map(m => m.id === msgId ? { ...m, label: "Citizen Alert Broadcasted Successfully ✓", requireApproval: false } : m));
   };
 
-  const quickPrompts = ["Recall all deployed teams", "Deploy nearest team", "Alert citizens about flood", "Resolve pending SOS", "Dispatch ambulance", "Generate situation report"];
+  const quickPrompts = ["Check Mettur & Chembarambakkam dam levels", "Recall all deployed teams", "Deploy nearest team", "Alert citizens about flood", "Resolve pending SOS", "Dispatch ambulance", "Generate situation report"];
 
   const intentIcon = {
     deploy_team:        <Users       className="h-3.5 w-3.5" />,
