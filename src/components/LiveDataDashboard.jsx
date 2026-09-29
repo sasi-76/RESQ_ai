@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Cloud, Droplets, Wind, Activity, TrendingUp, MapPin, AlertCircle, RefreshCw } from 'lucide-react';
+import { Cloud, Droplets, Wind, Activity, TrendingUp, MapPin, AlertCircle, RefreshCw, Newspaper, Waves, ShieldAlert } from 'lucide-react';
 import { LiveDataPoller } from '../services/liveDataService';
+import { fetchDisasterNews, fetchRiverLevels, fetchScraperStatus } from '../services/api';
 
 function LiveDataDashboard() {
   const [liveData, setLiveData] = useState(null);
@@ -8,25 +9,30 @@ function LiveDataDashboard() {
   const [lastUpdate, setLastUpdate] = useState(null);
   const [poller, setPoller] = useState(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [news, setNews] = useState([]);
+  const [riverLevels, setRiverLevels] = useState([]);
+  const [scraperOnline, setScraperOnline] = useState(false);
 
   useEffect(() => {
-    // Create and start poller
     const dataPoller = new LiveDataPoller((data) => {
       setLiveData(data);
       setLastUpdate(new Date());
       setLoading(false);
-      console.log('📡 Live data updated:', data);
-    }, 60); // Update every 60 seconds
+    }, 60);
 
     dataPoller.start();
     setPoller(dataPoller);
 
-    // Cleanup on unmount
-    return () => {
-      if (dataPoller) {
-        dataPoller.stop();
+    // Fetch scraped real data feeds
+    fetchScraperStatus().then(status => {
+      if (status?.scraperAvailable) {
+        setScraperOnline(true);
+        fetchDisasterNews().then(data => { if (data) setNews(data); });
+        fetchRiverLevels().then(data => { if (data) setRiverLevels(data); });
       }
-    };
+    }).catch(() => {});
+
+    return () => { if (dataPoller) dataPoller.stop(); };
   }, []);
 
   const toggleAutoRefresh = () => {
@@ -214,6 +220,93 @@ function LiveDataDashboard() {
           </div>
         </div>
       )}
+
+      {/* River Levels (Real scraped data) */}
+      {riverLevels.length > 0 && (
+        <div className="glass-card p-4">
+          <h4 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+            <Waves className="h-4 w-4 text-blue-400" />
+            River Water Levels ({riverLevels.length})
+          </h4>
+          <div className="space-y-2">
+            {riverLevels.slice(0, 6).map((river, idx) => {
+              const pct = river.dangerLevel > 0 ? (river.currentLevel / river.dangerLevel) * 100 : 0;
+              return (
+                <div key={river.riverId || idx} className="p-2 bg-slate-800/40 rounded-lg">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-semibold text-white">{river.riverName || river.riverId}</span>
+                    <span className={`text-sm font-bold ${
+                      pct >= 90 ? 'text-red-400' : pct >= 75 ? 'text-orange-400' : pct >= 50 ? 'text-yellow-400' : 'text-green-400'
+                    }`}>
+                      {river.currentLevel?.toFixed(1)}m
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-700 rounded-full h-1.5">
+                    <div
+                      className={`h-1.5 rounded-full ${
+                        pct >= 90 ? 'bg-red-500' : pct >= 75 ? 'bg-orange-500' : pct >= 50 ? 'bg-yellow-500' : 'bg-green-500'
+                      }`}
+                      style={{ width: `${Math.min(100, pct)}%` }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between mt-1">
+                    <span className="text-[10px] text-slate-500">
+                      {river.stationName || 'Gauge Station'} • {river.trend || 'stable'}
+                    </span>
+                    <span className="text-[10px] text-slate-500">
+                      Danger: {river.dangerLevel?.toFixed(1)}m
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Disaster News Feed (Real scraped data) */}
+      {news.length > 0 && (
+        <div className="glass-card p-4">
+          <h4 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+            <Newspaper className="h-4 w-4 text-purple-400" />
+            Disaster News Feed ({news.length})
+          </h4>
+          <div className="space-y-2">
+            {news.slice(0, 5).map((item, idx) => (
+              <a
+                key={idx}
+                href={item.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block p-2 bg-slate-800/40 rounded-lg hover:bg-slate-800/60 transition-colors"
+              >
+                <p className="text-sm text-white font-medium leading-tight">{item.title}</p>
+                {item.summary && (
+                  <p className="text-xs text-slate-400 mt-1 line-clamp-2">{item.summary}</p>
+                )}
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-[10px] text-slate-500">{item.source || 'News'}</span>
+                  {item.publishedAt && (
+                    <span className="text-[10px] text-slate-500">
+                      {new Date(item.publishedAt).toLocaleDateString('en-US', {
+                        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                      })}
+                    </span>
+                  )}
+                </div>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Scraper Status Badge */}
+      <div className="flex items-center justify-center gap-2 py-2">
+        <div className={`w-2 h-2 rounded-full ${scraperOnline ? 'bg-green-400 animate-pulse' : 'bg-slate-600'}`} />
+        <span className="text-[10px] text-slate-500">
+          {scraperOnline ? 'Real-time web scraper active' : 'Scraper offline — using API data only'}
+        </span>
+      </div>
     </div>
   );
 }

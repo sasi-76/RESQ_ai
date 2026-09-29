@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { Bell, MapPin, AlertTriangle, Phone, CheckCircle2, Info, X } from 'lucide-react';
+import { Bell, MapPin, AlertTriangle, Phone, CheckCircle2, Info, X, Newspaper, ExternalLink } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { emergencyContacts, precautions } from '../data/mockData';
 
 function Alerts() {
-  const { alerts: allAlerts, getFilteredAlerts, updateAlertStatus, alertFilter, setAlertFilter } = useApp();
+  const { alerts: allAlerts, getFilteredAlerts, updateAlertStatus, alertFilter, setAlertFilter, disasterNews } = useApp();
   const [selectedAlert, setSelectedAlert] = useState(null);
 
   const alerts = getFilteredAlerts();
@@ -396,6 +396,54 @@ function Alerts() {
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Live Disaster News Feed */}
+      {disasterNews && disasterNews.length > 0 && (
+        <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-6">
+          <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-4">
+            <Newspaper className="h-5 w-5 text-cyan-400" />
+            Live Disaster News Feed
+            <span className="text-xs bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded-full ml-2">
+              {disasterNews.length} articles
+            </span>
+          </h3>
+          <div className="space-y-3 max-h-96 overflow-y-auto">
+            {disasterNews.map((article, idx) => (
+              <div
+                key={idx}
+                className="flex items-start gap-3 p-3 rounded-lg bg-slate-900/60 hover:bg-slate-900 transition-colors border border-slate-700/30"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-slate-200 line-clamp-2">
+                    {article.title}
+                  </p>
+                  {article.summary && (
+                    <p className="text-xs text-slate-400 mt-1 line-clamp-1">{article.summary}</p>
+                  )}
+                  <div className="flex items-center gap-3 mt-1.5">
+                    <span className="text-[10px] text-cyan-400 font-medium">{article.source}</span>
+                    {article.publishedAt && (
+                      <span className="text-[10px] text-slate-500">
+                        {new Date(article.publishedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {article.url && (
+                  <a
+                    href={article.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0 p-1.5 rounded-lg bg-slate-700/50 hover:bg-cyan-500/20 text-slate-400 hover:text-cyan-400 transition-colors"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       )}

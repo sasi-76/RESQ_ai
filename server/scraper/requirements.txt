@@ -1,0 +1,3 @@
+scrapling[all]
+flask
+flask-cors

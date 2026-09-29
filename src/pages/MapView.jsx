@@ -32,6 +32,7 @@ const disasterIcons = {
   cyclone: '🌀',
   earthquake: '🌍',
   volcanic: '🌋',
+  infrastructure_failure: '📡',
 };
 
 function MapView() {
@@ -210,9 +211,9 @@ function MapView() {
     const group = layerGroupsRef.current.userMarker;
     group.clearLayers();
 
-    const lat = userLocation.lat;
-    const lng = userLocation.lng;
-    if (!lat || !lng) return;
+    const lat = Number(userLocation?.lat);
+    const lng = Number(userLocation?.lng);
+    if (!lat || !lng || isNaN(lat) || isNaN(lng)) return;
 
     // 1. Draw Breadcrumb Trail (past locations while moving)
     if (gpsTrackerTelemetry?.breadcrumbs?.length > 1) {
@@ -752,7 +753,7 @@ function MapView() {
         iconAnchor: [16, 16],
       });
 
-      const marker = leafletLib.marker([dam.latitude, dam.longitude], { icon }).addTo(group);
+      const marker = leafletLib.marker([dam.lat, dam.lng], { icon }).addTo(group);
       marker.bindPopup(`
         <div style="font-family: Inter, sans-serif; min-width: 220px; background: #1e293b; padding: 12px; border-radius: 8px; border: 2px solid ${color};">
           <strong style="font-size: 14px; color: #ffffff; display: block; margin-bottom: 8px;">💧 ${dam.name}</strong>
@@ -1388,7 +1389,7 @@ function MapView() {
                   <button
                     onClick={() => {
                       window.open(
-                        `https://www.google.com/maps/dir/?api=1&origin=${userLocation.lat},${userLocation.lng}&destination=${selectedEntity.data.lat},${selectedEntity.data.lng}`,
+                        `https://www.google.com/maps/dir/?api=1&origin=${userLocation?.lat || 13.0827},${userLocation?.lng || 80.2707}&destination=${selectedEntity.data.lat},${selectedEntity.data.lng}`,
                         '_blank'
                       );
                     }}

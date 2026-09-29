@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Droplets, TrendingUp, TrendingDown, Clock, RefreshCw, AlertTriangle, Waves } from 'lucide-react';
+import { Droplets, TrendingUp, TrendingDown, Clock, RefreshCw, AlertTriangle, Waves, Zap } from 'lucide-react';
 import { tnDamData, getDamStatus, calculateFillPercentage, formatLastUpdated } from '../data/damData';
+import { fetchDams as fetchDamsFromAPI } from '../services/api';
 
 const REFRESH_INTERVAL = 3600000; // 1 hour in milliseconds
 const HEARTBEAT_INTERVAL = 30000; // 30 seconds
@@ -27,32 +28,39 @@ export default function Dams() {
   const [nextRefreshIn, setNextRefreshIn] = useState(REFRESH_INTERVAL);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // Simulate fetching fresh data from TN WRD
   const syncDamData = async () => {
     setIsSyncing(true);
+    try {
+      const data = await fetchDamsFromAPI();
+      if (data && data.length > 0) {
+        setDams(data);
+        const now = new Date();
+        setLastSync(now);
+        setNextRefreshIn(REFRESH_INTERVAL);
+        localStorage.setItem('resqai_dams_real_v2', JSON.stringify(data));
+        localStorage.setItem('resqai_dams_last_sync', now.toISOString());
+      }
+    } catch (err) {
+      console.warn('[Dams] Backend fetch failed, keeping cached data:', err.message);
+    }
+    setIsSyncing(false);
+  };
 
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
-    // In production, this would fetch from TN WRD API
-    // For now, we refresh with the static data + small variations
-    const refreshedData = tnDamData.map(dam => ({
-      ...dam,
-      lastUpdated: new Date().toISOString(),
-      // Add small random variations to simulate real-time changes
-      inflow: Math.max(0, dam.inflow + Math.floor(Math.random() * 200 - 100)),
-      outflow: Math.max(0, dam.outflow + Math.floor(Math.random() * 200 - 100)),
-      currentLevel: Number((dam.currentLevel + (Math.random() * 0.2 - 0.1)).toFixed(2))
-    }));
-
-    setDams(refreshedData);
-    const now = new Date();
-    setLastSync(now);
-    setNextRefreshIn(REFRESH_INTERVAL);
-
-    localStorage.setItem('resqai_dams_real_v2', JSON.stringify(refreshedData));
-    localStorage.setItem('resqai_dams_last_sync', now.toISOString());
-
+  const triggerLiveRefresh = async () => {
+    setIsSyncing(true);
+    try {
+      const res = await fetch('http://localhost:5000/api/dams-refresh', { method: 'POST' });
+      const json = await res.json();
+      if (json.success && json.data) {
+        setDams(json.data);
+        setLastSync(new Date());
+        setNextRefreshIn(REFRESH_INTERVAL);
+        localStorage.setItem('resqai_dams_real_v2', JSON.stringify(json.data));
+        localStorage.setItem('resqai_dams_last_sync', new Date().toISOString());
+      }
+    } catch (err) {
+      console.warn('[Dams] Live refresh failed:', err.message);
+    }
     setIsSyncing(false);
   };
 
@@ -82,6 +90,11 @@ export default function Dams() {
       clearInterval(refreshTimer);
       clearInterval(heartbeat);
     };
+  }, []);
+
+  // Fetch from backend on mount
+  useEffect(() => {
+    syncDamData();
   }, []);
 
   // Countdown timer
@@ -167,6 +180,15 @@ export default function Dams() {
             >
               <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
               {isSyncing ? 'Syncing...' : 'Sync Feed Now'}
+            </button>
+
+            <button
+              onClick={triggerLiveRefresh}
+              disabled={isSyncing}
+              className="flex items-center gap-2 rounded-lg bg-green-500/20 hover:bg-green-500/30 border border-green-500/30 disabled:opacity-50 px-4 py-2 text-sm font-semibold text-green-400 transition-colors"
+            >
+              <Zap className={`h-4 w-4 ${isSyncing ? 'animate-pulse' : ''}`} />
+              Live Refresh
             </button>
           </div>
         </div>
@@ -256,6 +278,18 @@ export default function Dams() {
                   <p className="text-xs text-gray-400">cusecs</p>
                 </div>
               </div>
+
+              {/* Live Weather Data */}
+              {dam.weather && (
+                <div className="flex items-center flex-wrap gap-3 mb-4 rounded-lg bg-slate-900/50 p-2.5 border border-slate-700">
+                  <span className="text-xs font-semibold text-cyan-400 uppercase tracking-wide mr-1">Live Weather</span>
+                  <span className="text-xs text-slate-300">🌡️ {dam.weather.temperature}°C</span>
+                  <span className="text-xs text-slate-300">💧 {dam.weather.rainfall}mm</span>
+                  <span className="text-xs text-slate-300">🌧️ 6h: {dam.weather.catchmentRainfall6h}mm</span>
+                  <span className="text-xs text-slate-300">💨 {dam.weather.windSpeed}km/h</span>
+                  <span className="text-xs text-slate-300">💦 {dam.weather.humidity}%</span>
+                </div>
+              )}
 
               {/* Timestamp */}
               <div className="flex items-center gap-2 text-xs text-gray-500 pt-3 border-t border-slate-700">

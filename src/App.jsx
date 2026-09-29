@@ -8,6 +8,7 @@ import Hospitals from './pages/Hospitals';
 import Teams from './pages/Teams';
 import AdminDashboard from './pages/AdminDashboard';
 import DemoControls from './pages/DemoControls';
+import Predictions from './pages/Predictions';
 import FieldTasks from './pages/FieldTasks';
 import IncidentReports from './pages/IncidentReports';
 import Dams from './pages/Dams';
@@ -30,13 +31,14 @@ function App() {
             <Route path="/field-tasks" element={<FieldTasks />} />
             <Route path="/missions" element={<FieldTasks />} />
             <Route path="/dams" element={<Dams />} />
+            <Route path="/predictions" element={<Predictions />} />
             <Route path="/reports" element={<IncidentReports />} />
             <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/demo" element={<DemoControls />} />
           </Routes>
-          <ResQCopilot />
           <CriticalDisasterAlert />
         </Layout>
+        <ResQCopilot />
       </BrowserRouter>
     </AppProvider>
   );

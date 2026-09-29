@@ -852,12 +852,14 @@ export const recommendations = [];
 
 // ========== DATA SOURCES ==========
 export const dataSources = [
-  { name: 'Meteorological Department', status: 'active', lastUpdate: '2 min ago' },
-  { name: 'Geological Survey', status: 'active', lastUpdate: '5 min ago' },
-  { name: 'Disaster Management Authority', status: 'active', lastUpdate: '1 min ago' },
-  { name: 'Satellite & Sensor Data', status: 'active', lastUpdate: 'Real-time' },
-  { name: 'River Gauge Network', status: 'active', lastUpdate: '30 sec ago' },
-  { name: 'Weather Radar', status: 'active', lastUpdate: 'Real-time' },
+  { name: 'Open-Meteo Weather API', status: 'active', lastUpdate: 'Real-time' },
+  { name: 'USGS Earthquake Feed', status: 'active', lastUpdate: 'Real-time' },
+  { name: 'TN WRD Dam Monitoring (Scraped)', status: 'active', lastUpdate: 'Every 30 min' },
+  { name: 'IMD Weather Warnings (Scraped)', status: 'active', lastUpdate: 'Every 15 min' },
+  { name: 'CWC River Gauge Network (Scraped)', status: 'active', lastUpdate: 'Every 20 min' },
+  { name: 'NDMA Disaster Alerts (Scraped)', status: 'active', lastUpdate: 'Every 10 min' },
+  { name: 'NHM Hospital Registry (Scraped)', status: 'active', lastUpdate: 'Every 60 min' },
+  { name: 'Google News Disaster Feed (Scraped)', status: 'active', lastUpdate: 'Every 30 min' },
 ];
 
 export const initialAiDecisions = [];

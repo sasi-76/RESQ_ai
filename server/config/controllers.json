@@ -1,0 +1,46 @@
+[
+  {
+    "id": "CTL-CHENNAI",
+    "region": "Chennai",
+    "district": "Chennai, Tiruvallur, Chengalpattu, Kancheepuram",
+    "url": "http://localhost:5000",
+    "port": 5000,
+    "lat": 13.0827,
+    "lng": 80.2707,
+    "status": "online",
+    "lastSeen": "2026-09-29T12:15:48.366Z"
+  },
+  {
+    "id": "CTL-MADURAI",
+    "region": "Madurai",
+    "district": "Madurai, Theni, Dindigul, Sivaganga",
+    "url": "http://localhost:5001",
+    "port": 5001,
+    "lat": 9.9252,
+    "lng": 78.1198,
+    "status": "online",
+    "lastSeen": "2026-09-29T12:15:48.366Z"
+  },
+  {
+    "id": "CTL-COIMBATORE",
+    "region": "Coimbatore",
+    "district": "Coimbatore, Tiruppur, Erode, Nilgiris",
+    "url": "http://localhost:5002",
+    "port": 5002,
+    "lat": 11.0168,
+    "lng": 76.9558,
+    "status": "online",
+    "lastSeen": "2026-09-29T12:15:48.366Z"
+  },
+  {
+    "id": "CTL-SALEM",
+    "region": "Salem",
+    "district": "Salem, Namakkal, Dharmapuri, Tiruvannamalai",
+    "url": "http://localhost:5003",
+    "port": 5003,
+    "lat": 11.6643,
+    "lng": 78.146,
+    "status": "online",
+    "lastSeen": "2026-09-29T12:15:48.366Z"
+  }
+]

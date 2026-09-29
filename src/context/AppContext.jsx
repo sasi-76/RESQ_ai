@@ -1,7 +1,10 @@
 import { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { monitoredAreas, hospitals as initialHospitals, resqTeams, alerts as initialAlerts, initialAiDecisions } from '../data/mockData';
 import { getUserCurrentLocation, calculateDistanceKm, calculateTransitEta, reverseGeocodeCoordinates } from '../services/locationService';
-import { sendCommanderAlert, sendCitizenAlert } from '../services/notificationService';
+import { sendCommanderAlert, sendCitizenAlert, sendDeployAlert } from '../services/notificationService';
+import { analyzeDisasterWithAI, reanalyzeDecision, generateFieldTasksWithAI } from '../services/llmIntegration';
+import { connectSocket, disconnectSocket, onSocketEvent } from '../services/socket';
+import { updateDisaster as apiUpdateDisaster, deleteDisaster as apiDeleteDisaster, fetchHospitals as apiFetchHospitals, fetchDisasterNews as apiFetchNews, fetchAlerts as apiFetchAlerts } from '../services/api';
 
 const AppContext = createContext();
 
@@ -135,6 +138,117 @@ export const AppProvider = ({ children }) => {
   // Filters
   const [alertFilter, setAlertFilter] = useState('all');
   const [aiFilter, setAiFilter] = useState('all');
+
+  // ── Socket.IO Real-Time Updates ────────────────────────────────────────────
+  useEffect(() => {
+    connectSocket();
+
+    const cleanups = [
+      onSocketEvent('disaster:created', ({ data }) => {
+        setDisasters(prev => {
+          if (prev.find(d => d.id === data.id)) return prev;
+          return [...prev, data];
+        });
+      }),
+      onSocketEvent('disaster:updated', ({ data }) => {
+        setDisasters(prev => prev.map(d => d.id === data.id ? { ...d, ...data } : d));
+      }),
+      onSocketEvent('disaster:removed', ({ id }) => {
+        setDisasters(prev => prev.filter(d => d.id !== id));
+      }),
+      onSocketEvent('team:deployed', ({ data }) => {
+        setTeams(prev => prev.map(t => t.id === data.id ? { ...t, ...data } : t));
+      }),
+      onSocketEvent('team:recalled', ({ data }) => {
+        setTeams(prev => prev.map(t => t.id === data.id ? { ...t, ...data } : t));
+      }),
+      onSocketEvent('team:updated', ({ data }) => {
+        setTeams(prev => prev.map(t => t.id === data.id ? { ...t, ...data } : t));
+      }),
+      onSocketEvent('alert:created', ({ data }) => {
+        setAlerts(prev => {
+          if (prev.find(a => a.id === data.id)) return prev;
+          return [data, ...prev];
+        });
+      }),
+      onSocketEvent('alert:dismissed', ({ id }) => {
+        setAlerts(prev => prev.filter(a => a.id !== id));
+      }),
+      onSocketEvent('sos:created', ({ data }) => {
+        setSosBeacons(prev => {
+          if (prev.find(s => s.id === data.id)) return prev;
+          return [...prev, data];
+        });
+      }),
+      onSocketEvent('sos:assigned', ({ data }) => {
+        setSosBeacons(prev => prev.map(s => s.id === data.id ? { ...s, ...data } : s));
+      }),
+      onSocketEvent('sos:resolved', ({ data }) => {
+        setSosBeacons(prev => prev.map(s => s.id === data.id ? { ...s, ...data } : s));
+      }),
+      onSocketEvent('hospital:ambulance_dispatched', ({ data }) => {
+        setHospitals(prev => prev.map(h => h.id === data.id ? { ...h, ...data } : h));
+      }),
+      onSocketEvent('controller:down', (data) => {
+        console.log(`[Heartbeat] CONTROLLER DOWN: ${data.region} region unreachable!`);
+      }),
+      onSocketEvent('controller:recovered', (data) => {
+        console.log(`[Heartbeat] CONTROLLER RECOVERED: ${data.region} region back online`);
+      }),
+    ];
+
+    return () => {
+      cleanups.forEach(cleanup => cleanup());
+      disconnectSocket();
+    };
+  }, []);
+
+  // ── Fetch real data from backend scrapers on mount ─────────────────────────
+  const [disasterNews, setDisasterNews] = useState([]);
+  const [scraperStatus, setScraperStatus] = useState({ available: false, lastSync: null });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadBackendData() {
+      try {
+        const [backendHospitals, backendAlerts, news] = await Promise.all([
+          apiFetchHospitals(),
+          apiFetchAlerts(),
+          apiFetchNews(),
+        ]);
+
+        if (cancelled) return;
+
+        if (Array.isArray(backendHospitals) && backendHospitals.length > 0) {
+          setHospitals(backendHospitals);
+          setScraperStatus(prev => ({ ...prev, available: true, lastSync: new Date().toISOString() }));
+        }
+
+        if (Array.isArray(backendAlerts) && backendAlerts.length > 0) {
+          setAlerts(prev => {
+            const existingIds = new Set(prev.map(a => a.id));
+            const newAlerts = backendAlerts.filter(a => !existingIds.has(a.id));
+            return newAlerts.length > 0 ? [...prev, ...newAlerts] : prev;
+          });
+        }
+
+        if (Array.isArray(news) && news.length > 0) {
+          setDisasterNews(news);
+        }
+      } catch (err) {
+        console.warn('[AppContext] Backend data fetch failed:', err.message);
+      }
+    }
+
+    loadBackendData();
+    const refreshInterval = setInterval(loadBackendData, 300000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(refreshInterval);
+    };
+  }, []);
 
   // ── Sync to LocalStorage ───────────────────────────────────────────────────
   useEffect(() => {
@@ -459,15 +573,97 @@ export const AppProvider = ({ children }) => {
       timestamp: disaster.timestamp,
       type: disaster.type,
       area: disaster.areaName,
-      decision: `Deploy emergency response to ${disaster.areaName}`,
-      confidence: Math.floor(85 + Math.random() * 15),
-      reasoning: `AI detected ${disaster.type} with ${disaster.riskPercent}% risk level. Immediate response recommended based on population density and infrastructure vulnerability.`,
-      status: 'pending',
-      affectedPopulation: Math.floor(Math.random() * 100000) + 15000,
-      recommendedTeams: Math.floor(Math.random() * 3) + 1,
+      module: 'AI Decision Engine',
+      decision: `Analyzing ${disaster.type} in ${disaster.areaName}...`,
+      confidence: 0,
+      reasoning: 'AI is analyzing disaster data...',
+      algorithm: 'ResQAI LLM Decision Engine v2.0',
+      dataPoints: 0,
+      status: 'analyzing',
+      affectedPopulation: 0,
+      recommendedTeams: 0,
+      priorityActions: [],
+      evacuationNeeded: false,
+      alertLevel: 'P3',
+      previousRisk: disaster.previousRisk || 0,
+      newRisk: disaster.riskPercent || 0,
     };
 
     setAiDecisions((prev) => [aiDecision, ...prev]);
+
+    analyzeDisasterWithAI(disaster, { teams, hospitals })
+      .then((result) => {
+        if (result.success) {
+          setAiDecisions((prev) =>
+            prev.map((d) =>
+              d.id === aiDecision.id
+                ? {
+                    ...d,
+                    decision: result.decision,
+                    confidence: result.confidence,
+                    reasoning: result.reasoning,
+                    dataPoints: Math.floor(50 + Math.random() * 200),
+                    status: 'pending',
+                    affectedPopulation: result.estimatedAffectedPopulation,
+                    recommendedTeams: result.recommendedTeams,
+                    priorityActions: result.priorityActions,
+                    evacuationNeeded: result.evacuationNeeded,
+                    alertLevel: result.alertLevel,
+                    estimatedResponseTime: result.estimatedResponseTime,
+                    riskTrend: result.riskTrend,
+                    aiAnalyzedAt: new Date().toISOString(),
+                  }
+                : d
+            )
+          );
+          showNotification({
+            id: Date.now(),
+            type: 'ai',
+            title: 'AI ANALYSIS COMPLETE',
+            message: `AI Decision Engine analyzed ${disaster.type} in ${disaster.areaName} (${result.confidence}% confidence)`,
+            severity: 'info',
+            timestamp: new Date().toISOString(),
+          });
+        } else {
+          setAiDecisions((prev) =>
+            prev.map((d) =>
+              d.id === aiDecision.id
+                ? {
+                    ...d,
+                    decision: `Deploy emergency response to ${disaster.areaName}`,
+                    confidence: Math.floor(75 + Math.random() * 20),
+                    reasoning: `Fallback analysis: ${disaster.type} detected at ${disaster.riskPercent}% risk. AI engine unavailable — using rule-based assessment. Recommend immediate response based on severity and population density.`,
+                    dataPoints: Math.floor(10 + Math.random() * 50),
+                    status: 'pending',
+                    affectedPopulation: Math.floor(Math.random() * 100000) + 15000,
+                    recommendedTeams: Math.floor(Math.random() * 3) + 1,
+                    alertLevel: disaster.riskPercent >= 70 ? 'P1' : disaster.riskPercent >= 50 ? 'P2' : 'P3',
+                    algorithm: 'Rule-Based Fallback v1.0',
+                  }
+                : d
+            )
+          );
+        }
+      })
+      .catch(() => {
+        setAiDecisions((prev) =>
+          prev.map((d) =>
+            d.id === aiDecision.id
+              ? {
+                  ...d,
+                  decision: `Deploy emergency response to ${disaster.areaName}`,
+                  confidence: Math.floor(70 + Math.random() * 15),
+                  reasoning: `Rule-based fallback: ${disaster.type} with ${disaster.riskPercent}% risk level detected. AI engine offline — using heuristic assessment.`,
+                  dataPoints: Math.floor(5 + Math.random() * 20),
+                  status: 'pending',
+                  affectedPopulation: Math.floor(Math.random() * 80000) + 10000,
+                  recommendedTeams: Math.ceil(disaster.riskPercent / 30),
+                  algorithm: 'Rule-Based Fallback v1.0',
+                }
+              : d
+          )
+        );
+      });
 
     showNotification({
       id: Date.now(),
@@ -489,7 +685,10 @@ export const AppProvider = ({ children }) => {
     return enrichedDisaster;
   };
 
-  const removeDisaster = (disasterId) => {
+  const removeDisaster = async (disasterId) => {
+    // Delete from backend first (triggers auto-reconnect for infrastructure failures)
+    await apiDeleteDisaster(disasterId);
+
     setDisasters((prev) => prev.filter((d) => String(d.id) !== String(disasterId)));
 
     setAlerts((prev) => prev.filter((a) => String(a.disasterId) !== String(disasterId)));
@@ -523,19 +722,292 @@ export const AppProvider = ({ children }) => {
   };
 
   const updateAiDecision = (decisionId, status, comment = '') => {
+    const decision = aiDecisions.find((d) => d.id === decisionId);
+
     setAiDecisions((prev) =>
-      prev.map((decision) =>
-        decision.id === decisionId
-          ? { ...decision, status, reviewedAt: new Date().toISOString(), comment }
-          : decision
+      prev.map((d) =>
+        d.id === decisionId
+          ? {
+              ...d,
+              status,
+              reviewedAt: new Date().toISOString(),
+              comment,
+              approvedBy: status === 'approved' ? 'Controller-Admin' : d.approvedBy,
+              approvedAt: status === 'approved' ? new Date().toISOString() : d.approvedAt,
+            }
+          : d
       )
     );
 
-    if (status === 'approved') {
-      const decision = aiDecisions.find((d) => d.id === decisionId);
-      if (decision) {
-        autoDeployTeam(decision.area, decision.type);
+    if (status === 'approved' && decision) {
+      executePostApprovalPipeline(decision);
+    }
+  };
+
+  const executePostApprovalPipeline = (decision) => {
+    const area = decision.area;
+    const type = decision.type || 'disaster';
+    const teamsNeeded = decision.recommendedTeams || 1;
+    const actions = decision.priorityActions || [];
+    const needsEvacuation = decision.evacuationNeeded || false;
+    const alertLevel = decision.alertLevel || 'P3';
+
+    const matchedDisaster = disasters.find(
+      (d) => d.areaName === area && d.status !== 'completed'
+    );
+
+    // ── Step 1: Deploy the AI-recommended number of teams ──────────────────
+    const deployedTeamInfo = [];
+    let teamsDeployed = 0;
+    const standbyTeams = teams.filter((t) => t.status === 'standby');
+
+    for (let i = 0; i < Math.min(teamsNeeded, standbyTeams.length); i++) {
+      const team = standbyTeams[i];
+      const mission = `AI-approved ${type} response — ${alertLevel}`;
+      deployTeam(team.id, area, mission, matchedDisaster?.id || null);
+      deployedTeamInfo.push({ name: team.name, leader: team.leader || '' });
+      teamsDeployed++;
+
+      sendDeployAlert(team, area, mission);
+    }
+
+    const deployedTeamNames = deployedTeamInfo.map((t) => t.name);
+
+    // ── Step 2: Dispatch ambulance from nearest hospital ───────────────────
+    let ambulanceDispatched = false;
+    if (matchedDisaster && matchedDisaster.lat && matchedDisaster.lng) {
+      const nearest = getNearestHospitalForLocation(matchedDisaster.lat, matchedDisaster.lng);
+      if (nearest && nearest.id) {
+        ambulanceDispatched = dispatchAmbulance(nearest.id, area, matchedDisaster.id);
       }
+    } else {
+      const hospitalsWithDist = getHospitalsWithDistance();
+      if (hospitalsWithDist.length > 0 && hospitalsWithDist[0].ambulances > 0) {
+        ambulanceDispatched = dispatchAmbulance(hospitalsWithDist[0].id, area, matchedDisaster?.id || null);
+      }
+    }
+
+    // ── Step 3: AI-generated field tasks (async, like disaster analysis) ────
+    // Create placeholder tasks immediately, then replace with AI-generated ones
+    const placeholderTaskId = `task-ai-${Date.now()}`;
+    const placeholderTask = {
+      id: placeholderTaskId,
+      title: `Generating field tasks for ${area}...`,
+      description: 'AI Task Engine is analyzing the approved decision and generating detailed field tasks...',
+      location: area,
+      priority: alertLevel === 'P1' ? 'immediate' : alertLevel === 'P2' ? 'high' : 'medium',
+      category: 'Reconnaissance',
+      status: 'pending',
+      assignedTeam: deployedTeamInfo[0]?.name || 'Unassigned',
+      assignedLeader: deployedTeamInfo[0]?.leader || '',
+      createdAt: new Date().toISOString(),
+      aiGenerated: true,
+      aiAnalyzing: true,
+      decisionId: decision.id,
+    };
+
+    setTasks((prev) => [placeholderTask, ...prev]);
+
+    generateFieldTasksWithAI(decision, {
+      teams,
+      area,
+      type,
+      alertLevel,
+      deployedTeamNames,
+    })
+      .then((result) => {
+        // Remove placeholder
+        setTasks((prev) => prev.filter((t) => t.id !== placeholderTaskId));
+
+        if (result.success && result.tasks.length > 0) {
+          const aiTasks = result.tasks.map((aiTask, idx) => {
+            const teamIdx = idx % (deployedTeamInfo.length || 1);
+            const assigned = deployedTeamInfo[teamIdx] || { name: 'Unassigned', leader: '' };
+            return {
+              id: `task-ai-${Date.now()}-${idx}`,
+              title: aiTask.title,
+              description: aiTask.description,
+              location: area,
+              priority: aiTask.priority,
+              category: aiTask.category,
+              status: 'pending',
+              assignedTeam: assigned.name,
+              assignedLeader: assigned.leader,
+              createdAt: new Date().toISOString(),
+              aiGenerated: true,
+              decisionId: decision.id,
+              estimatedDuration: aiTask.estimatedDuration || '',
+              personnelNeeded: aiTask.personnelNeeded || 0,
+              equipment: aiTask.equipment || '',
+              notes: aiTask.notes || '',
+            };
+          });
+
+          setTasks((prev) => [...aiTasks, ...prev]);
+
+          showNotification({
+            id: Date.now(),
+            type: 'ai',
+            title: 'AI FIELD TASKS GENERATED',
+            message: `${aiTasks.length} detailed tasks created for ${area} by AI Task Engine`,
+            severity: 'info',
+            timestamp: new Date().toISOString(),
+          });
+        } else {
+          // Fallback: create basic tasks from priorityActions
+          const fallbackTasks = actions.map((action, idx) => {
+            const teamIdx = idx % (deployedTeamInfo.length || 1);
+            const assigned = deployedTeamInfo[teamIdx] || { name: 'Unassigned', leader: '' };
+            return {
+              id: `task-fb-${Date.now()}-${idx}`,
+              title: action,
+              description: `Task from AI decision for ${area}. ${decision.reasoning || ''}`,
+              location: area,
+              priority: alertLevel === 'P1' ? 'immediate' : alertLevel === 'P2' ? 'high' : 'medium',
+              category: 'Reconnaissance',
+              status: 'pending',
+              assignedTeam: assigned.name,
+              assignedLeader: assigned.leader,
+              createdAt: new Date().toISOString(),
+              aiGenerated: true,
+              decisionId: decision.id,
+            };
+          });
+          if (fallbackTasks.length > 0) {
+            setTasks((prev) => [...fallbackTasks, ...prev]);
+          }
+        }
+      })
+      .catch(() => {
+        // On error: remove placeholder, create basic fallback tasks
+        setTasks((prev) => prev.filter((t) => t.id !== placeholderTaskId));
+        if (actions.length > 0) {
+          const fallbackTasks = actions.map((action, idx) => {
+            const teamIdx = idx % (deployedTeamInfo.length || 1);
+            const assigned = deployedTeamInfo[teamIdx] || { name: 'Unassigned', leader: '' };
+            return {
+              id: `task-fb-${Date.now()}-${idx}`,
+              title: action,
+              description: `Task from AI decision for ${area}. ${decision.reasoning || ''}`,
+              location: area,
+              priority: alertLevel === 'P1' ? 'immediate' : alertLevel === 'P2' ? 'high' : 'medium',
+              category: 'Reconnaissance',
+              status: 'pending',
+              assignedTeam: assigned.name,
+              assignedLeader: assigned.leader,
+              createdAt: new Date().toISOString(),
+              aiGenerated: true,
+              decisionId: decision.id,
+            };
+          });
+          setTasks((prev) => [...fallbackTasks, ...prev]);
+        }
+      });
+
+    // ── Step 4: Send push notifications to commanders and citizens ─────────
+    if (matchedDisaster) {
+      sendCommanderAlert({
+        ...matchedDisaster,
+        description:
+          `AI DECISION APPROVED (${alertLevel}): ${decision.decision}\n` +
+          `Teams deployed: ${deployedTeamNames.join(', ') || 'None available'}\n` +
+          `Ambulance: ${ambulanceDispatched ? 'Dispatched' : 'None available'}`,
+      });
+
+      if (alertLevel === 'P1' || alertLevel === 'P2') {
+        sendCitizenAlert(matchedDisaster);
+      }
+    }
+
+    // ── Step 5: Trigger evacuation alert if AI recommended it ──────────────
+    if (needsEvacuation && matchedDisaster) {
+      setCriticalAlert({
+        ...matchedDisaster,
+        description: `EVACUATION ORDERED by AI Decision Engine — ${decision.decision}`,
+      });
+
+      showNotification({
+        id: Date.now() + 1,
+        type: 'alert',
+        title: 'EVACUATION TRIGGERED',
+        message: `AI recommended evacuation for ${area}. Estimated ${(decision.affectedPopulation || 0).toLocaleString()} people affected.`,
+        severity: 'critical',
+        timestamp: new Date().toISOString(),
+      });
+
+      sendCitizenAlert({
+        ...matchedDisaster,
+        type: `EVACUATION — ${matchedDisaster.type}`,
+      });
+    }
+
+    // ── Summary notification ───────────────────────────────────────────────
+    showNotification({
+      id: Date.now() + 2,
+      type: 'ai',
+      title: 'POST-APPROVAL PIPELINE EXECUTING',
+      message: [
+        `${teamsDeployed} team${teamsDeployed !== 1 ? 's' : ''} deployed`,
+        ambulanceDispatched ? 'ambulance dispatched' : null,
+        'AI generating field tasks...',
+        'alerts sent',
+        needsEvacuation ? 'EVACUATION triggered' : null,
+      ].filter(Boolean).join(' · '),
+      severity: 'info',
+      timestamp: new Date().toISOString(),
+    });
+  };
+
+  const reanalyzeAiDecision = async (decisionId) => {
+    const decision = aiDecisions.find((d) => d.id === decisionId);
+    if (!decision || decision.status !== 'pending') return;
+
+    setAiDecisions((prev) =>
+      prev.map((d) =>
+        d.id === decisionId ? { ...d, status: 'analyzing', reasoning: 'AI is re-analyzing...' } : d
+      )
+    );
+
+    try {
+      const result = await reanalyzeDecision(decision, { teams, hospitals });
+      if (result.success) {
+        setAiDecisions((prev) =>
+          prev.map((d) =>
+            d.id === decisionId
+              ? {
+                  ...d,
+                  decision: result.decision,
+                  confidence: result.confidence,
+                  reasoning: result.reasoning,
+                  status: 'pending',
+                  recommendedTeams: result.recommendedTeams,
+                  priorityActions: result.priorityActions || [],
+                  evacuationNeeded: result.evacuationNeeded,
+                  alertLevel: result.alertLevel,
+                  riskTrend: result.riskTrend,
+                  aiAnalyzedAt: new Date().toISOString(),
+                  reanalyzed: true,
+                }
+              : d
+          )
+        );
+        showNotification({
+          id: Date.now(),
+          type: 'ai',
+          title: 'AI RE-ANALYSIS COMPLETE',
+          message: `Updated analysis for ${decision.area} (${result.confidence}% confidence)`,
+          severity: 'info',
+          timestamp: new Date().toISOString(),
+        });
+      } else {
+        setAiDecisions((prev) =>
+          prev.map((d) => (d.id === decisionId ? { ...d, status: 'pending' } : d))
+        );
+      }
+    } catch {
+      setAiDecisions((prev) =>
+        prev.map((d) => (d.id === decisionId ? { ...d, status: 'pending' } : d))
+      );
     }
   };
 
@@ -631,14 +1103,18 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  const completeDisaster = (disasterId) => {
+  const completeDisaster = async (disasterId) => {
     const disaster = disasters.find((d) => String(d.id) === String(disasterId));
     if (!disaster) return;
+
+    // Update backend first (triggers auto-reconnect for infrastructure failures)
+    const updates = { status: 'completed', completedAt: new Date().toISOString() };
+    await apiUpdateDisaster(disasterId, updates);
 
     setDisasters((prev) =>
       prev.map((d) =>
         String(d.id) === String(disasterId)
-          ? { ...d, status: 'completed', completedAt: new Date().toISOString() }
+          ? { ...d, ...updates }
           : d
       )
     );
@@ -938,6 +1414,58 @@ export const AppProvider = ({ children }) => {
       timestamp: new Date().toISOString(),
     });
 
+    // ── Auto-create disaster from civilian SOS → triggers full AI pipeline ──
+    const sosSeverity = newBeacon.severity || 'high';
+    const riskMap = { critical: 85, high: 70, medium: 50, low: 30 };
+    const disasterTypeMap = {
+      'trapped in building': 'flood',
+      'flood': 'flood',
+      'water': 'flood',
+      'medical emergency': 'earthquake',
+      'medical': 'earthquake',
+      'cyclone': 'cyclone',
+      'wind': 'cyclone',
+      'storm': 'cyclone',
+      'earthquake': 'earthquake',
+      'fire': 'flood',
+    };
+
+    const inferType = () => {
+      const msg = `${newBeacon.type || ''} ${newBeacon.message || ''}`.toLowerCase();
+      for (const [keyword, dtype] of Object.entries(disasterTypeMap)) {
+        if (msg.includes(keyword)) return dtype;
+      }
+      return 'flood';
+    };
+
+    const sosDisaster = {
+      id: `sos-disaster-${Date.now()}`,
+      areaName: newBeacon.areaName || 'Unknown Location',
+      lat: newBeacon.lat || 12.9,
+      lng: newBeacon.lng || 80.2,
+      type: inferType(),
+      severity: sosSeverity,
+      riskPercent: riskMap[sosSeverity] || 65,
+      description: `Civilian SOS from ${newBeacon.senderName}: ${newBeacon.message}`,
+      timestamp: new Date().toISOString(),
+      status: 'active',
+      source: 'civilian',
+      sosBeaconId: newBeacon.id,
+      contact: newBeacon.contact || '',
+      peopleCount: newBeacon.peopleCount || 1,
+    };
+
+    addDisaster(sosDisaster);
+
+    showNotification({
+      id: Date.now() + 1,
+      type: 'ai',
+      title: 'CIVILIAN SOS → AI PIPELINE TRIGGERED',
+      message: `AI analyzing SOS from ${newBeacon.senderName} in ${newBeacon.areaName}. Check AI Admin for review.`,
+      severity: 'high',
+      timestamp: new Date().toISOString(),
+    });
+
     return newBeacon;
   };
 
@@ -1014,13 +1542,17 @@ export const AppProvider = ({ children }) => {
     setNotifications((prev) => prev.filter((n) => n.id !== notificationId));
   };
 
-  const clearAllDisasters = () => {
-    const activeDisasterIds = disasters
-      .filter((d) => d.status !== 'completed')
-      .map((d) => d.id);
+  const clearAllDisasters = async () => {
+    const activeDisasters = disasters.filter((d) => d.status !== 'completed');
+
+    // Update all active disasters in backend (triggers auto-reconnect for infrastructure failures)
+    const updates = { status: 'completed', completedAt: new Date().toISOString() };
+    await Promise.all(
+      activeDisasters.map((d) => apiUpdateDisaster(d.id, updates))
+    );
 
     setDisasters((prev) =>
-      prev.map((d) => d.status !== 'completed' ? { ...d, status: 'completed', completedAt: new Date().toISOString() } : d)
+      prev.map((d) => d.status !== 'completed' ? { ...d, ...updates } : d)
     );
     setAlerts((prev) => prev.map((a) => ({ ...a, status: 'resolved' })));
 
@@ -1248,10 +1780,11 @@ export const AppProvider = ({ children }) => {
     const criticalAreas = ongoingDisasters.filter((d) => d.severity === 'critical').length;
     const resources = getResourceStats();
 
-    let overallRiskPercent = 76;
+    let overallRiskPercent = 0;
     if (ongoingDisasters.length > 0) {
-      const maxDisasterRisk = Math.max(...ongoingDisasters.map((d) => d.riskPercent || 50));
-      overallRiskPercent = Math.max(overallRiskPercent, maxDisasterRisk);
+      const avgRisk = ongoingDisasters.reduce((sum, d) => sum + (d.riskPercent || 0), 0) / ongoingDisasters.length;
+      const maxRisk = Math.max(...ongoingDisasters.map((d) => d.riskPercent || 0));
+      overallRiskPercent = Math.round(maxRisk * 0.6 + avgRisk * 0.4);
     }
 
     const hospitalsWithDist = getHospitalsWithDistance();
@@ -1340,6 +1873,8 @@ export const AppProvider = ({ children }) => {
     monitoredAreas: getMonitoredAreasWithData(),
     tasks,
     dispatchedAmbulances,
+    disasterNews,
+    scraperStatus,
 
     // Actions
     addDisaster,
@@ -1348,6 +1883,7 @@ export const AppProvider = ({ children }) => {
     clearAllDisasters,
     updateAlertStatus,
     updateAiDecision,
+    reanalyzeAiDecision,
     logAiAction,
     deployTeam,
     autoDeployTeam,

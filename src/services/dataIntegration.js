@@ -134,57 +134,118 @@ export async function fetchEarthquakeData(lat, lng, radiusKm = 500) {
 }
 
 /**
- * Fetch cyclone/storm tracking data
+ * Fetch cyclone/storm tracking data — uses Scrapling scraper for IMD bulletins
  */
 export async function fetchCycloneData() {
   try {
-    // In production, use ISRO/IMD cyclone tracking API
-    // For now, using a placeholder structure
+    const res = await fetch('http://localhost:5000/api/scraper/cyclone-bulletins');
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+        const bulletin = json.data[0];
+        return {
+          name: bulletin.name || 'Unknown',
+          category: bulletin.category || 'Tropical Storm',
+          windSpeed: bulletin.windSpeed || 0,
+          windDirection: bulletin.movement || 'NW',
+          pressure: bulletin.pressure || 1000,
+          lat: bulletin.lat,
+          lng: bulletin.lng,
+          forecast: bulletin.forecast || '',
+          alerts: json.data,
+          timestamp: new Date().toISOString(),
+          source: 'IMD-scraper',
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('Cyclone scraper unavailable:', err.message);
+  }
+
+  // Fallback to OpenWeatherMap
+  try {
     const response = await fetch(
       `${API_CONFIG.OPENWEATHER.baseUrl}/onecall?lat=11.75&lon=79.77&appid=${API_CONFIG.OPENWEATHER.apiKey}&exclude=minutely,hourly`
     );
-
     if (!response.ok) throw new Error('Cyclone API failed');
-
     const data = await response.json();
-
     return {
-      windSpeed: data.current.wind_speed * 3.6, // m/s to km/h
+      windSpeed: data.current.wind_speed * 3.6,
       windDirection: data.current.wind_deg,
       pressure: data.current.pressure,
       alerts: data.alerts || [],
       timestamp: new Date().toISOString(),
     };
   } catch (error) {
-    console.error('Error fetching cyclone data:', error);
+    console.warn('OpenWeather cyclone fallback failed:', error.message);
     return null;
   }
 }
 
 /**
- * Fetch river water level data
+ * Fetch river water level data — uses Scrapling scraper for real CWC data
  */
 export async function fetchRiverLevelData(riverId = 'cuddalore') {
   try {
-    // In production, connect to Central Water Commission API
-    // Placeholder structure for now
-
-    // Simulated API call (replace with real CWC endpoint)
-    const mockData = {
-      riverId: riverId,
-      currentLevel: 4.8 + (Math.random() * 0.5 - 0.25),
-      dangerLevel: 6.0,
-      warningLevel: 5.5,
-      trend: 'rising',
-      flowRate: 1250,
-      timestamp: new Date().toISOString(),
-    };
-
-    return mockData;
-  } catch (error) {
-    console.error('Error fetching river level data:', error);
-    return null;
+    const res = await fetch('http://localhost:5000/api/scraper/river-levels');
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+        const match = json.data.find(r =>
+          r.riverId === riverId ||
+          r.riverName?.toLowerCase().includes(riverId.toLowerCase()) ||
+          r.stationName?.toLowerCase().includes(riverId.toLowerCase())
+        );
+        if (match) return match;
+        return json.data[0];
+      }
+    }
+  } catch (err) {
+    console.warn('River level scraper unavailable, using dam-derived fallback:', err.message);
   }
+
+  // Fallback: derive river level from dam data if scraper unavailable
+  try {
+    const damRes = await fetch('http://localhost:5000/api/dams');
+    if (damRes.ok) {
+      const damJson = await damRes.json();
+      if (damJson.success && Array.isArray(damJson.data)) {
+        const RIVER_DAM_MAP = {
+          cuddalore: 'sathanur',
+          kaveri: 'mettur',
+          bhavani: 'bhavanisagar',
+          vaigai: 'vaigai',
+          adyar: 'chembarambakkam',
+          kodayar: 'pechiparai',
+          amaravathi: 'amaravathi',
+          thenpennai: 'sathanur',
+          kosasthalaiyar: 'poondi',
+        };
+        const damId = RIVER_DAM_MAP[riverId.toLowerCase()] || null;
+        const dam = damId ? damJson.data.find(d => d.id === damId) : damJson.data[0];
+        if (dam) {
+          const fillPct = (dam.storage / dam.capacity) * 100;
+          const derivedLevel = (fillPct / 100) * 6.5;
+          return {
+            riverId,
+            riverName: dam.river,
+            stationName: `Downstream of ${dam.name}`,
+            currentLevel: Math.round(derivedLevel * 100) / 100,
+            dangerLevel: 6.0,
+            warningLevel: 5.5,
+            trend: dam.inflow > dam.outflow ? 'rising' : dam.inflow < dam.outflow ? 'falling' : 'stable',
+            flowRate: dam.outflow || 0,
+            timestamp: dam.lastUpdated || new Date().toISOString(),
+            source: 'dam-derived',
+          };
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Dam-derived river fallback failed:', err.message);
+  }
+
+  return null;
 }
 
 /**

@@ -163,7 +163,7 @@ export const tnDamData = [
     lastUpdated: '2026-09-15T17:07:00+05:30',
     status: 'normal'
   },
-  // Karnataka Major Dams
+  // Karnataka Kaveri Basin Dams (supply water to Tamil Nadu)
   {
     id: 'krishnaraja',
     name: 'Krishnaraja Sagar (KRS)',
@@ -177,22 +177,6 @@ export const tnDamData = [
     outflow: 4200, // cusecs
     latitude: 12.4244,
     longitude: 76.5750,
-    lastUpdated: '2026-09-15T17:07:00+05:30',
-    status: 'normal'
-  },
-  {
-    id: 'tungabhadra',
-    name: 'Tungabhadra Dam',
-    river: 'Tungabhadra',
-    district: 'Ballari, Karnataka',
-    currentLevel: 1615.50,
-    fullReservoirLevel: 1633,
-    capacity: 133, // TMC
-    storage: 95, // TMC
-    inflow: 2800, // cusecs
-    outflow: 3100, // cusecs
-    latitude: 15.1494,
-    longitude: 76.3322,
     lastUpdated: '2026-09-15T17:07:00+05:30',
     status: 'normal'
   },
@@ -227,76 +211,46 @@ export const tnDamData = [
     longitude: 75.9300,
     lastUpdated: '2026-09-15T17:07:00+05:30',
     status: 'normal'
-  },
-  // Andhra Pradesh Major Dams
-  {
-    id: 'srisailam',
-    name: 'Srisailam Dam',
-    river: 'Krishna',
-    district: 'Kurnool, Andhra Pradesh',
-    currentLevel: 854.20,
-    fullReservoirLevel: 885,
-    capacity: 215.81, // TMC
-    storage: 185.50, // TMC
-    inflow: 8500, // cusecs
-    outflow: 9200, // cusecs
-    latitude: 16.0736,
-    longitude: 78.8978,
-    lastUpdated: '2026-09-15T17:07:00+05:30',
-    status: 'normal'
-  },
-  {
-    id: 'nagarjuna',
-    name: 'Nagarjuna Sagar Dam',
-    river: 'Krishna',
-    district: 'Nalgonda, Telangana',
-    currentLevel: 565.80,
-    fullReservoirLevel: 590,
-    capacity: 312, // TMC
-    storage: 268, // TMC
-    inflow: 12000, // cusecs
-    outflow: 13500, // cusecs
-    latitude: 16.5719,
-    longitude: 79.3117,
-    lastUpdated: '2026-09-15T17:07:00+05:30',
-    status: 'normal'
-  },
-  {
-    id: 'somasila',
-    name: 'Somasila Dam',
-    river: 'Penna',
-    district: 'Nellore, Andhra Pradesh',
-    currentLevel: 45.20,
-    fullReservoirLevel: 60,
-    capacity: 78, // TMC
-    storage: 58.5, // TMC
-    inflow: 1500, // cusecs
-    outflow: 1800, // cusecs
-    latitude: 14.4894,
-    longitude: 79.8256,
-    lastUpdated: '2026-09-15T17:07:00+05:30',
-    status: 'normal'
-  },
-  {
-    id: 'gandikota',
-    name: 'Gandikota Dam',
-    river: 'Penna',
-    district: 'Kadapa, Andhra Pradesh',
-    currentLevel: 35.60,
-    fullReservoirLevel: 42,
-    capacity: 31, // TMC
-    storage: 26.2, // TMC
-    inflow: 800, // cusecs
-    outflow: 950, // cusecs
-    latitude: 14.7558,
-    longitude: 78.2744,
-    lastUpdated: '2026-09-15T17:07:00+05:30',
-    status: 'normal'
   }
 ];
 
+export function normalizeDam(dam) {
+  if (!dam) return null;
+  const lat = Number(dam.latitude ?? dam.lat ?? 12.0);
+  const lng = Number(dam.longitude ?? dam.lng ?? 78.0);
+  const current = Number(dam.currentLevel ?? dam.currentLevelFt ?? 0);
+  const frl = Number(dam.fullReservoirLevel ?? dam.frlFt ?? (current > 0 ? current : 100));
+  const storage = Number(dam.storage ?? dam.storageMcft ?? (dam.storageTmc ? dam.storageTmc * 1000 : 0));
+  const capacity = Number(dam.capacity ?? dam.storageMcft ?? (dam.capacityTmc ? dam.capacityTmc * 1000 : storage));
+  const inflow = Number(dam.inflow ?? dam.inflowCusecs ?? 0);
+  const outflow = Number(dam.outflow ?? dam.outflowCusecs ?? 0);
+
+  return {
+    ...dam,
+    lat,
+    lng,
+    latitude: lat,
+    longitude: lng,
+    currentLevel: current,
+    currentLevelFt: current,
+    fullReservoirLevel: frl,
+    frlFt: frl,
+    storage,
+    storageMcft: storage,
+    capacity,
+    inflow,
+    inflowCusecs: inflow,
+    outflow,
+    outflowCusecs: outflow,
+    lastUpdated: dam.lastUpdated || new Date().toISOString(),
+  };
+}
+
 export function getDamStatus(dam) {
-  const fillPercentage = (dam.currentLevel / dam.fullReservoirLevel) * 100;
+  if (!dam) return { label: 'Normal', color: 'cyan', severity: 'normal' };
+  const current = Number(dam.currentLevel ?? dam.currentLevelFt ?? 0);
+  const frl = Number(dam.fullReservoirLevel ?? dam.frlFt ?? 100);
+  const fillPercentage = frl > 0 ? (current / frl) * 100 : 0;
 
   if (fillPercentage >= 90) return { label: 'Critical High', color: 'red', severity: 'high' };
   if (fillPercentage >= 75) return { label: 'High', color: 'orange', severity: 'elevated' };
@@ -306,18 +260,28 @@ export function getDamStatus(dam) {
 }
 
 export function calculateFillPercentage(dam) {
-  return ((dam.currentLevel / dam.fullReservoirLevel) * 100).toFixed(1);
+  if (!dam) return '0.0';
+  const current = Number(dam.currentLevel ?? dam.currentLevelFt ?? 0);
+  const frl = Number(dam.fullReservoirLevel ?? dam.frlFt ?? 100);
+  if (!frl || isNaN(current) || isNaN(frl)) return '0.0';
+  return Math.min(100, Math.max(0, (current / frl) * 100)).toFixed(1);
 }
 
 export function formatLastUpdated(timestamp) {
-  const date = new Date(timestamp);
-  return date.toLocaleString('en-IN', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true,
-    timeZone: 'Asia/Kolkata'
-  });
+  if (!timestamp) return 'Live Telemetry';
+  try {
+    const date = new Date(timestamp);
+    if (isNaN(date.getTime())) return String(timestamp);
+    return date.toLocaleString('en-IN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+      timeZone: 'Asia/Kolkata'
+    });
+  } catch (e) {
+    return String(timestamp);
+  }
 }

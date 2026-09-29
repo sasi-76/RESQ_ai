@@ -18,6 +18,7 @@ import {
   RotateCcw,
   Radio,
   Droplets,
+  Brain,
 } from 'lucide-react';
 
 const navItems = [
@@ -28,6 +29,7 @@ const navItems = [
   { to: '/teams', icon: Users, label: 'Teams' },
   { to: '/tasks', icon: CheckSquare, label: 'Operations' },
   { to: '/dams', icon: Droplets, label: 'Dams' },
+  { to: '/predictions', icon: Brain, label: 'Predictions' },
   { to: '/reports', icon: FileText, label: 'EOC Reports' },
   { to: '/admin', icon: Shield, label: 'AI Admin' },
   { to: '/demo', icon: Zap, label: 'Demo Controls' },

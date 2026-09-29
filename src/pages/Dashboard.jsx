@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
   AlertTriangle,
   MapPin,
@@ -43,35 +43,20 @@ import {
   CloudRain,
 } from 'lucide-react';
 import {
-  PieChart,
-  Pie,
-  Cell,
-  ResponsiveContainer,
-  Tooltip,
-  Legend,
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-} from 'recharts';
-import {
   monitoredAreas,
   hazardRiskOverview,
-  changeTrendData,
   sensorData as initialSensorData,
   alerts,
-  resqTeams,
 } from '../data/mockData';
 import { tnDamData } from '../data/damData';
 import LiveDataDashboard from '../components/LiveDataDashboard';
 import ResourceTracker from '../components/ResourceTracker';
+import ControllerStatus from '../components/ControllerStatus';
 import { useApp } from '../context/AppContext';
 import {
   searchLocations,
   analyzeLocationRisk,
   calculateDistanceKm,
-  calculateTransitEta,
   reverseGeocodeCoordinates,
   getFourDirectionalAdjacentZones,
 } from '../services/locationService';
@@ -121,54 +106,11 @@ function sensorBarColor(pct) {
   return 'bg-cyan-500';
 }
 
-// ── Custom Recharts Tooltips ─────────────────────────────────────────────────
-
-function PieTooltipContent({ active, payload }) {
-  if (!active || !payload?.length) return null;
-  const { name, value, color } = payload[0].payload;
-  return (
-    <div className="rounded-xl bg-slate-900/95 border border-slate-700/80 px-3.5 py-2 shadow-2xl text-xs backdrop-blur-md">
-      <span className="inline-block w-2.5 h-2.5 rounded-full mr-2" style={{ background: color }} />
-      <span className="text-slate-200 font-semibold">{name}</span>
-      <span className="ml-2 text-cyan-300 font-black">{value}%</span>
-    </div>
-  );
-}
-
-function AreaTooltipContent({ active, payload, label }) {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="rounded-xl bg-slate-900/95 border border-slate-700/80 px-3.5 py-2.5 shadow-2xl text-xs backdrop-blur-md">
-      <p className="text-slate-400 mb-1 font-mono">{label}</p>
-      <p className="text-white font-black text-sm">
-        Composite Risk: <span className="text-red-400">{payload[0].value}%</span>
-      </p>
-    </div>
-  );
-}
-
-function CustomPieLegend({ payload }) {
-  return (
-    <div className="flex flex-wrap justify-center gap-x-5 gap-y-1.5 mt-3">
-      {payload.map((entry) => (
-        <div key={entry.value} className="flex items-center gap-2 text-xs text-slate-300 font-medium">
-          <span
-            className="inline-block w-2.5 h-2.5 rounded-full shadow-sm"
-            style={{ background: entry.color }}
-          />
-          {entry.value}
-        </div>
-      ))}
-    </div>
-  );
-}
-
 // =============================================================================
 // ── Dashboard Component ─────────────────────────────────────────────────────
 // =============================================================================
 
 function Dashboard() {
-  const navigate = useNavigate();
   const {
     userLocation,
     isDetectingLocation,
@@ -177,7 +119,6 @@ function Dashboard() {
     isLiveTracking,
     setIsLiveTracking,
     gpsTrackerTelemetry,
-    simulateGpsMovement,
     detectUserLocation,
     setSearchLocation,
     setUserExactLocation,
@@ -194,41 +135,6 @@ function Dashboard() {
   } = useApp();
 
   const stats = getStats();
-
-  // Calculate risk trend dynamically
-  const calculateRiskTrend = () => {
-    if (changeTrendData.length < 2) return { status: 'stable', label: 'STABLE', color: 'blue', icon: ArrowRight };
-
-    const lastThree = changeTrendData.slice(-3);
-    const avgChange = (lastThree[lastThree.length - 1].risk - lastThree[0].risk) / lastThree.length;
-
-    if (avgChange > 5) return {
-      status: 'elevated',
-      label: 'ELEVATED TREND',
-      color: 'red',
-      icon: ArrowUpRight,
-      bgClass: 'bg-red-500/10 border-red-500/30',
-      textClass: 'text-red-400'
-    };
-    if (avgChange < -5) return {
-      status: 'declining',
-      label: 'DECLINING',
-      color: 'green',
-      icon: ArrowDown,
-      bgClass: 'bg-green-500/10 border-green-500/30',
-      textClass: 'text-green-400'
-    };
-    return {
-      status: 'stable',
-      label: 'STABLE',
-      color: 'blue',
-      icon: ArrowRight,
-      bgClass: 'bg-blue-500/10 border-blue-500/30',
-      textClass: 'text-blue-400'
-    };
-  };
-
-  const riskTrend = calculateRiskTrend();
 
   // ── Live Digital Clock (IST & UTC) ────────────────────────────────────────
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -259,11 +165,9 @@ function Dashboard() {
   const [searchDropdownOpen, setSearchDropdownOpen] = useState(false);
   const [analyzedLocation, setAnalyzedLocation] = useState(null);
   const [dossierTab, setDossierTab] = useState('vulnerability'); // 'vulnerability' | 'medical' | 'shelters' | 'tactical' | 'weather'
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const searchContainerRef = useRef(null);
 
   // Manual Exact Location Setter
-  const [isManualSetterOpen, setIsManualSetterOpen] = useState(false);
   const [manualLocationInput, setManualLocationInput] = useState('');
   const [manualSuggestions, setManualSuggestions] = useState([]);
   const [isSearchingManual, setIsSearchingManual] = useState(false);
@@ -2406,6 +2310,7 @@ function Dashboard() {
       <div className="relative z-10 space-y-6">
         <LiveDataDashboard />
         <ResourceTracker />
+        <ControllerStatus />
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════════ */}

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import {
   Bot, X, Send, Brain, Zap, CheckCircle,
-  Users, Radio, ShieldAlert, Siren, MessageCircle,
+  Users, Radio, ShieldAlert, Siren, MessageCircle, Mic, MicOff,
 } from "lucide-react";
 import { useApp } from "../../context/AppContext";
 import { chatWithAIReasoning } from "../../services/llmIntegration";
@@ -164,6 +164,9 @@ export default function ResQCopilot() {
   const [isTyping, setIsTyping]       = useState(false);
   const [isReasoning, setIsReasoning] = useState(false);
   const messagesEndRef = useRef(null);
+  const [isListening, setIsListening] = useState(false);
+  const [voiceTranscript, setVoiceTranscript] = useState(null);
+  const recognitionRef = useRef(null);
 
   const [messages, setMessages] = useState([{
     id: 1, sender: "ai", source: "ai",
@@ -174,6 +177,46 @@ export default function ResQCopilot() {
   useEffect(() => {
     if (isOpen) messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isOpen]);
+
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.lang = 'en-IN';
+      recognition.onresult = (event) => {
+        const transcript = Array.from(event.results).map(r => r[0].transcript).join('');
+        setInputQuery(transcript);
+        if (event.results[0].isFinal) {
+          setIsListening(false);
+          setVoiceTranscript(transcript);
+        }
+      };
+      recognition.onerror = () => setIsListening(false);
+      recognition.onend = () => setIsListening(false);
+      recognitionRef.current = recognition;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (voiceTranscript) {
+      handleSend(voiceTranscript);
+      setVoiceTranscript(null);
+    }
+  }, [voiceTranscript]);
+
+  const toggleVoice = () => {
+    if (!recognitionRef.current) return;
+    if (isListening) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    } else {
+      setInputQuery('');
+      recognitionRef.current.start();
+      setIsListening(true);
+    }
+  };
 
   const handleSend = async (textToSend) => {
     const text = (textToSend || inputQuery).trim();
@@ -233,21 +276,59 @@ export default function ResQCopilot() {
 
   return (
     <>
-      {/* Launcher */}
-      <button onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-6 right-6 z-40 flex items-center gap-2.5 px-4 py-3 rounded-full bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-semibold shadow-2xl hover:shadow-blue-500/30 transition-all hover:scale-105 active:scale-95 border border-white/20"
-        title="Open ResQ AI Copilot">
-        <span className="relative flex h-3 w-3">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-          <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-400" />
-        </span>
-        <Bot className="h-5 w-5" />
-        <span className="text-sm tracking-wide">ResQ Copilot</span>
-      </button>
+      {/* Floating Launcher Button — bottom-right, above taskbar */}
+      {!isOpen && (
+        <div data-copilot-launcher style={{
+          position: 'fixed',
+          bottom: '28px',
+          right: '28px',
+          zIndex: 99999,
+        }}>
+          <button onClick={() => setIsOpen(true)}
+            title="Open ResQ AI Copilot"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              padding: '14px 22px',
+              borderRadius: '9999px',
+              background: 'linear-gradient(135deg, #2563eb, #4f46e5, #7c3aed)',
+              color: '#ffffff',
+              fontWeight: 600,
+              fontSize: '14px',
+              border: '1px solid rgba(255,255,255,0.2)',
+              cursor: 'pointer',
+              boxShadow: '0 8px 32px rgba(79, 70, 229, 0.5)',
+              transition: 'transform 0.15s, box-shadow 0.15s',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.05)'; e.currentTarget.style.boxShadow = '0 12px 40px rgba(79, 70, 229, 0.6)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 8px 32px rgba(79, 70, 229, 0.5)'; }}
+          >
+            <span style={{ position: 'relative', display: 'flex', height: '12px', width: '12px' }}>
+              <span style={{ position: 'absolute', display: 'inline-flex', height: '100%', width: '100%', borderRadius: '9999px', backgroundColor: '#34d399', opacity: 0.75, animation: 'ping 1s cubic-bezier(0, 0, 0.2, 1) infinite' }} />
+              <span style={{ position: 'relative', display: 'inline-flex', height: '12px', width: '12px', borderRadius: '9999px', backgroundColor: '#34d399' }} />
+            </span>
+            <Bot className="h-5 w-5" style={{ color: '#ffffff' }} />
+            <span style={{ color: '#ffffff' }}>ResQ Copilot</span>
+          </button>
+        </div>
+      )}
 
-      {/* Drawer */}
+      {/* Chat Drawer */}
       {isOpen && (
-        <div className="fixed bottom-20 right-6 z-50 w-[95vw] sm:w-[440px] h-[600px] rounded-2xl bg-slate-900/95 backdrop-blur-xl border border-slate-700/80 shadow-2xl flex flex-col overflow-hidden animate-slide-up">
+        <div data-copilot-drawer style={{
+          position: 'fixed',
+          bottom: '28px',
+          right: '28px',
+          zIndex: 99999,
+          width: '440px',
+          maxWidth: '95vw',
+          height: '580px',
+          borderRadius: '16px',
+          overflow: 'hidden',
+          boxShadow: '0 12px 48px rgba(0, 0, 0, 0.5)',
+        }}
+        className="bg-slate-900/95 backdrop-blur-xl border border-slate-700/80 flex flex-col animate-slide-up">
 
           {/* Header */}
           <div className="px-4 py-3.5 bg-slate-950/90 border-b border-slate-800 flex items-center justify-between">
@@ -401,11 +482,27 @@ export default function ResQCopilot() {
             ))}
           </div>
 
+          {/* Listening indicator */}
+          {isListening && (
+            <div className="px-4 py-2 bg-red-500/10 border-t border-red-500/20 flex items-center gap-2">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+              </span>
+              <span className="text-xs text-red-400 font-medium">Listening... speak your command</span>
+            </div>
+          )}
+
           {/* Input */}
           <form onSubmit={(e) => { e.preventDefault(); handleSend(); }} className="p-3 bg-slate-950 border-t border-slate-800 flex items-center gap-2">
             <input type="text" value={inputQuery} onChange={(e) => setInputQuery(e.target.value)}
-              placeholder='Try: "Recall Alpha Squad" or "Deploy team to flood zone"'
+              placeholder='Try: "Recall Alpha Squad" or say a voice command'
               className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+            <button type="button" onClick={toggleVoice}
+              className={`p-2 rounded-lg transition-all shrink-0 ${isListening ? 'bg-red-500/30 text-red-400 animate-pulse border border-red-500/50' : 'text-slate-400 hover:text-cyan-400 hover:bg-slate-700/50'}`}
+              title={isListening ? 'Stop listening' : 'Voice command'}>
+              {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+            </button>
             <button type="submit" disabled={!inputQuery.trim()} className="p-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-xl transition-colors shrink-0">
               <Send className="h-4 w-4" />
             </button>

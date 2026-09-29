@@ -1,7 +1,8 @@
 # Environment variables
 .env
-.env.local
-.env.production
+.env.*
+.env.bak
+!.env.example
 
 # Dependencies
 node_modules/
@@ -35,6 +36,67 @@ Thumbs.db
 # Testing
 coverage/
 
-# Claude Code
+# Claude Code / AI agent files
 .claude/
-node_modules
+
+# Netlify deploy config
+.netlify/
+
+# Server (backend) — keep out of frontend repo
+server/node_modules/
+server/package-lock.json
+server/.env
+server/.env.*
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Private presentation & doc files
+*.pptx
+*.docx
+*.xlsx
+
+# Auto-generated AI markdown docs (temp)
+ADMIN_DASHBOARD_GUIDE.md
+AI_ADMIN_FIXED.md
+ALL_BUTTONS_FIXED.md
+ALL_BUTTONS_STATUS.md
+ARCHITECTURE.md
+BUTTONS_FIXED_SUMMARY.md
+BUTTON_UX_GUIDE.md
+CHATBOT_CLEAN_TEXT.md
+CHATBOT_FIXED.md
+CHATBOT_IMPROVED.md
+CHECK_ALL_BUTTONS.md
+COMPLETE_REVIEW.md
+DEMO_BUTTONS_FIXED.md
+DISTANCE_TIME_FIXED.md
+FEATURES_COMPLETE.md
+FILE_STRUCTURE.md
+GITHUB_PUSH_INSTRUCTIONS.md
+GLOBAL_SYSTEM_INTEGRATION.md
+HARDCODED_PARTS.md
+HARDCODED_SUMMARY.md
+HOSPITAL_ROUTING_FEATURE.md
+HOW_TO_FIX_WARNINGS.md
+IMPROVEMENT_PLAN.md
+LIVE_TN_DATA_COMPLETE.md
+LLM_INTEGRATION_GUIDE.md
+PENDING_TASKS.md
+PENDING_TASKS_UPDATED.md
+PROJECT_OVERVIEW.md
+QUICKSTART.md
+QUICK_CHATBOT_GUIDE.md
+QUICK_FIX_GUIDE.md
+QUICK_IMPROVEMENTS.md
+QUICK_SUMMARY_FIXES.md
+README_WARNINGS.md
+REAL_TIME_DATA_INTEGRATION.md
+RED_WARNINGS_EXPLAINED.md
+RESOURCE_TRACKING_COMPLETE.md
+SUGGESTIONS.md
+TESTING_GUIDE.md
+UI_COLOR_FIXES.md

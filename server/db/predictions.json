@@ -1,0 +1,397 @@
+[
+  {
+    "id": "pred-1790684087514-dgty1d",
+    "type": "flood",
+    "subtype": "rapid_filling",
+    "severity": "critical",
+    "probability": 95,
+    "title": "Rapid filling at Sathanur Dam",
+    "description": "Inflow (4,912 cusecs) vastly exceeds outflow (735 cusecs). Combined with 78.5% fill level, risk of emergency spillway activation is elevated.",
+    "areaName": "Sathanur Dam - Tiruvannamalai",
+    "lat": 12.2833,
+    "lng": 78.8667,
+    "predictedAt": "2026-09-29T12:14:47.514Z",
+    "predictedFor": "2026-09-30T00:14:47.514Z",
+    "timeframeHours": 12,
+    "confidence": 70,
+    "factors": [
+      "Inflow/outflow ratio: 6.7x",
+      "Fill level: 78.5%",
+      "River: Thenpennai"
+    ],
+    "recommendedActions": [
+      "Increase controlled outflow immediately",
+      "Alert all downstream riverside settlements",
+      "Deploy water-level monitoring along river path"
+    ],
+    "source": "compound-analysis"
+  },
+  {
+    "id": "pred-1790684087514-g3obbq",
+    "type": "flood",
+    "subtype": "rapid_filling",
+    "severity": "critical",
+    "probability": 95,
+    "title": "Rapid filling at Poondi Reservoir",
+    "description": "Inflow (65 cusecs) vastly exceeds outflow (0 cusecs). Combined with 76.7% fill level, risk of emergency spillway activation is elevated.",
+    "areaName": "Poondi Reservoir - Tiruvallur",
+    "lat": 13.3667,
+    "lng": 79.85,
+    "predictedAt": "2026-09-29T12:14:47.514Z",
+    "predictedFor": "2026-09-30T00:14:47.514Z",
+    "timeframeHours": 12,
+    "confidence": 70,
+    "factors": [
+      "Inflow/outflow ratio: 65.0x",
+      "Fill level: 76.7%",
+      "River: Kosasthalaiyar"
+    ],
+    "recommendedActions": [
+      "Increase controlled outflow immediately",
+      "Alert all downstream riverside settlements",
+      "Deploy water-level monitoring along river path"
+    ],
+    "source": "compound-analysis"
+  },
+  {
+    "id": "pred-1790684087514-karyqt",
+    "type": "flood",
+    "subtype": "rapid_filling",
+    "severity": "critical",
+    "probability": 95,
+    "title": "Rapid filling at Red Hills Lake",
+    "description": "Inflow (35 cusecs) vastly exceeds outflow (0 cusecs). Combined with 70.0% fill level, risk of emergency spillway activation is elevated.",
+    "areaName": "Red Hills Lake - Tiruvallur",
+    "lat": 13.1667,
+    "lng": 80.1833,
+    "predictedAt": "2026-09-29T12:14:47.514Z",
+    "predictedFor": "2026-09-30T00:14:47.514Z",
+    "timeframeHours": 12,
+    "confidence": 70,
+    "factors": [
+      "Inflow/outflow ratio: 35.0x",
+      "Fill level: 70.0%",
+      "River: Kosasthalaiyar"
+    ],
+    "recommendedActions": [
+      "Increase controlled outflow immediately",
+      "Alert all downstream riverside settlements",
+      "Deploy water-level monitoring along river path"
+    ],
+    "source": "compound-analysis"
+  },
+  {
+    "id": "pred-1790684088100-oe24y2",
+    "type": "compound",
+    "subtype": "multi_hazard",
+    "severity": "critical",
+    "probability": 95,
+    "title": "Compound disaster risk: Mettur Dam area",
+    "description": "26 active disaster(s) (flood, infrastructure_failure) near Mettur Dam while dam is at 75.1% capacity. Multiple simultaneous hazards significantly increase the risk of cascading failures and complicate response operations.",
+    "areaName": "Mettur Dam region - Salem",
+    "lat": 11.7893,
+    "lng": 77.8008,
+    "predictedAt": "2026-09-29T12:14:48.100Z",
+    "predictedFor": "2026-09-30T12:14:48.100Z",
+    "timeframeHours": 24,
+    "confidence": 55,
+    "factors": [
+      "Active disasters nearby: 26",
+      "Disaster types: flood, infrastructure_failure",
+      "Dam fill: 75.1%"
+    ],
+    "recommendedActions": [
+      "Escalate to multi-hazard emergency protocol",
+      "Coordinate joint response across disaster types",
+      "Increase monitoring frequency for Mettur Dam",
+      "Prepare for cascading failure scenarios",
+      "Brief all field teams on compound risk factors"
+    ],
+    "source": "compound-analysis"
+  },
+  {
+    "id": "pred-1790684088100-7cyc3i",
+    "type": "compound",
+    "subtype": "multi_hazard",
+    "severity": "critical",
+    "probability": 95,
+    "title": "Compound disaster risk: Sathanur Dam area",
+    "description": "10 active disaster(s) (flood) near Sathanur Dam while dam is at 78.5% capacity. Multiple simultaneous hazards significantly increase the risk of cascading failures and complicate response operations.",
+    "areaName": "Sathanur Dam region - Tiruvannamalai",
+    "lat": 12.2833,
+    "lng": 78.8667,
+    "predictedAt": "2026-09-29T12:14:48.100Z",
+    "predictedFor": "2026-09-30T12:14:48.100Z",
+    "timeframeHours": 24,
+    "confidence": 55,
+    "factors": [
+      "Active disasters nearby: 10",
+      "Disaster types: flood",
+      "Dam fill: 78.5%"
+    ],
+    "recommendedActions": [
+      "Escalate to multi-hazard emergency protocol",
+      "Coordinate joint response across disaster types",
+      "Increase monitoring frequency for Sathanur Dam",
+      "Prepare for cascading failure scenarios",
+      "Brief all field teams on compound risk factors"
+    ],
+    "source": "compound-analysis"
+  },
+  {
+    "id": "pred-1790684088100-gmiafy",
+    "type": "compound",
+    "subtype": "multi_hazard",
+    "severity": "critical",
+    "probability": 95,
+    "title": "Compound disaster risk: Chembarambakkam Lake area",
+    "description": "12 active disaster(s) (flood, infrastructure_failure) near Chembarambakkam Lake while dam is at 68.5% capacity. Multiple simultaneous hazards significantly increase the risk of cascading failures and complicate response operations.",
+    "areaName": "Chembarambakkam Lake region - Chennai",
+    "lat": 13.005,
+    "lng": 80.0244,
+    "predictedAt": "2026-09-29T12:14:48.100Z",
+    "predictedFor": "2026-09-30T12:14:48.100Z",
+    "timeframeHours": 24,
+    "confidence": 55,
+    "factors": [
+      "Active disasters nearby: 12",
+      "Disaster types: flood, infrastructure_failure",
+      "Dam fill: 68.5%"
+    ],
+    "recommendedActions": [
+      "Escalate to multi-hazard emergency protocol",
+      "Coordinate joint response across disaster types",
+      "Increase monitoring frequency for Chembarambakkam Lake",
+      "Prepare for cascading failure scenarios",
+      "Brief all field teams on compound risk factors"
+    ],
+    "source": "compound-analysis"
+  },
+  {
+    "id": "pred-1790684088100-2smmjz",
+    "type": "compound",
+    "subtype": "multi_hazard",
+    "severity": "critical",
+    "probability": 95,
+    "title": "Compound disaster risk: Poondi Reservoir area",
+    "description": "12 active disaster(s) (flood, infrastructure_failure) near Poondi Reservoir while dam is at 76.7% capacity. Multiple simultaneous hazards significantly increase the risk of cascading failures and complicate response operations.",
+    "areaName": "Poondi Reservoir region - Tiruvallur",
+    "lat": 13.3667,
+    "lng": 79.85,
+    "predictedAt": "2026-09-29T12:14:48.100Z",
+    "predictedFor": "2026-09-30T12:14:48.100Z",
+    "timeframeHours": 24,
+    "confidence": 55,
+    "factors": [
+      "Active disasters nearby: 12",
+      "Disaster types: flood, infrastructure_failure",
+      "Dam fill: 76.7%"
+    ],
+    "recommendedActions": [
+      "Escalate to multi-hazard emergency protocol",
+      "Coordinate joint response across disaster types",
+      "Increase monitoring frequency for Poondi Reservoir",
+      "Prepare for cascading failure scenarios",
+      "Brief all field teams on compound risk factors"
+    ],
+    "source": "compound-analysis"
+  },
+  {
+    "id": "pred-1790684088100-w6nqy2",
+    "type": "compound",
+    "subtype": "multi_hazard",
+    "severity": "critical",
+    "probability": 95,
+    "title": "Compound disaster risk: Red Hills Lake area",
+    "description": "7 active disaster(s) (infrastructure_failure) near Red Hills Lake while dam is at 70.0% capacity. Multiple simultaneous hazards significantly increase the risk of cascading failures and complicate response operations.",
+    "areaName": "Red Hills Lake region - Tiruvallur",
+    "lat": 13.1667,
+    "lng": 80.1833,
+    "predictedAt": "2026-09-29T12:14:48.100Z",
+    "predictedFor": "2026-09-30T12:14:48.100Z",
+    "timeframeHours": 24,
+    "confidence": 55,
+    "factors": [
+      "Active disasters nearby: 7",
+      "Disaster types: infrastructure_failure",
+      "Dam fill: 70.0%"
+    ],
+    "recommendedActions": [
+      "Escalate to multi-hazard emergency protocol",
+      "Coordinate joint response across disaster types",
+      "Increase monitoring frequency for Red Hills Lake",
+      "Prepare for cascading failure scenarios",
+      "Brief all field teams on compound risk factors"
+    ],
+    "source": "compound-analysis"
+  },
+  {
+    "id": "pred-1790684088100-noj6n9",
+    "type": "compound",
+    "subtype": "multi_hazard",
+    "severity": "critical",
+    "probability": 95,
+    "title": "Compound disaster risk: Hemavathy Dam area",
+    "description": "9 active disaster(s) (flood) near Hemavathy Dam while dam is at 87.3% capacity. Multiple simultaneous hazards significantly increase the risk of cascading failures and complicate response operations.",
+    "areaName": "Hemavathy Dam region - Hassan, Karnataka",
+    "lat": 12.79,
+    "lng": 75.93,
+    "predictedAt": "2026-09-29T12:14:48.100Z",
+    "predictedFor": "2026-09-30T12:14:48.100Z",
+    "timeframeHours": 24,
+    "confidence": 55,
+    "factors": [
+      "Active disasters nearby: 9",
+      "Disaster types: flood",
+      "Dam fill: 87.3%"
+    ],
+    "recommendedActions": [
+      "Escalate to multi-hazard emergency protocol",
+      "Coordinate joint response across disaster types",
+      "Increase monitoring frequency for Hemavathy Dam",
+      "Prepare for cascading failure scenarios",
+      "Brief all field teams on compound risk factors"
+    ],
+    "source": "compound-analysis"
+  },
+  {
+    "id": "pred-1790684087514-7hqvmx",
+    "type": "flood",
+    "subtype": "dam_overflow",
+    "severity": "high",
+    "probability": 75,
+    "title": "Sathanur Dam approaching critical capacity",
+    "description": "At current net inflow of 4,177 cusecs, Sathanur Dam is projected to reach 90% capacity in approximately 22 hours. Currently at 78.5%. Downstream areas in Tiruvannamalai may face flooding.",
+    "areaName": "Sathanur Dam - Tiruvannamalai",
+    "lat": 12.2833,
+    "lng": 78.8667,
+    "predictedAt": "2026-09-29T12:14:47.514Z",
+    "predictedFor": "2026-09-30T09:46:52.053Z",
+    "timeframeHours": 22,
+    "confidence": 74.2327028968159,
+    "factors": [
+      "Current fill: 78.5%",
+      "Net inflow: 4,177 cusecs",
+      "Inflow: 4,912 / Outflow: 735 cusecs",
+      "Estimated 22h to 90% capacity"
+    ],
+    "recommendedActions": [
+      "Alert downstream communities in Tiruvannamalai",
+      "Increase dam outflow to slow filling rate",
+      "Pre-position rescue teams along river corridor",
+      "Notify district administration for potential evacuation"
+    ],
+    "source": "trend-analysis"
+  },
+  {
+    "id": "pred-1790684087514-9wc531",
+    "type": "flood",
+    "subtype": "rainfall_forecast",
+    "severity": "high",
+    "probability": 71,
+    "title": "Heavy rainfall forecast near Mettur Dam (In 2 days)",
+    "description": "Forecast: 22.6mm of rain (95% probability) expected on 2026-10-01 in the Mettur Dam catchment area. Combined with high dam levels, flood risk is significantly elevated.",
+    "areaName": "Mettur Dam catchment - Salem",
+    "lat": 11.7893,
+    "lng": 77.8008,
+    "predictedAt": "2026-09-29T12:14:47.514Z",
+    "predictedFor": "2026-10-01T06:30:00.000Z",
+    "timeframeHours": 72,
+    "confidence": 54,
+    "factors": [
+      "Forecast rainfall: 22.6mm",
+      "Rain probability: 95%",
+      "Current dam fill: 75.1%",
+      "Max wind: 8.3 km/h"
+    ],
+    "recommendedActions": [
+      "Pre-position flood rescue assets",
+      "Prepare controlled release from Mettur Dam to create buffer",
+      "Issue advance flood warning for Salem"
+    ],
+    "source": "weather-forecast"
+  },
+  {
+    "id": "pred-1790684087514-tdrr03",
+    "type": "flood",
+    "subtype": "dam_full",
+    "severity": "high",
+    "probability": 65,
+    "title": "Sathanur Dam projected to reach full capacity",
+    "description": "Sathanur Dam may reach 100% storage in ~40 hours. Emergency spillway operations will be required. Major downstream flooding risk for Tiruvannamalai and adjacent areas.",
+    "areaName": "Sathanur Dam - Tiruvannamalai",
+    "lat": 12.2833,
+    "lng": 78.8667,
+    "predictedAt": "2026-09-29T12:14:47.514Z",
+    "predictedFor": "2026-10-01T04:26:05.512Z",
+    "timeframeHours": 40,
+    "confidence": 63.924666826270844,
+    "factors": [
+      "Current storage: 2,200.68 / 2,805 mcft",
+      "Net inflow rate: 4,177 cusecs",
+      "Fill rate: 15.04 mcft/hour"
+    ],
+    "recommendedActions": [
+      "Prepare emergency spillway discharge plan",
+      "Begin evacuating low-lying areas near Thenpennai river",
+      "Deploy rescue boats and emergency shelters downstream",
+      "Coordinate with upstream dams for controlled release"
+    ],
+    "source": "trend-analysis"
+  },
+  {
+    "id": "pred-1790684087514-8unvo5",
+    "type": "flood",
+    "subtype": "rapid_filling",
+    "severity": "moderate",
+    "probability": 60,
+    "title": "Rapid filling at Mettur Dam",
+    "description": "Inflow (42,639 cusecs) vastly exceeds outflow (13,293 cusecs). Combined with 75.1% fill level, risk of emergency spillway activation is elevated.",
+    "areaName": "Mettur Dam - Salem",
+    "lat": 11.7893,
+    "lng": 77.8008,
+    "predictedAt": "2026-09-29T12:14:47.514Z",
+    "predictedFor": "2026-09-30T00:14:47.514Z",
+    "timeframeHours": 12,
+    "confidence": 70,
+    "factors": [
+      "Inflow/outflow ratio: 3.2x",
+      "Fill level: 75.1%",
+      "River: Kaveri"
+    ],
+    "recommendedActions": [
+      "Increase controlled outflow immediately",
+      "Alert all downstream riverside settlements",
+      "Deploy water-level monitoring along river path"
+    ],
+    "source": "compound-analysis"
+  },
+  {
+    "id": "pred-1790684087514-r2qg52",
+    "type": "flood",
+    "subtype": "rainfall_forecast",
+    "severity": "moderate",
+    "probability": 54,
+    "title": "Heavy rainfall forecast near Amaravathi Dam (In 2 days)",
+    "description": "Forecast: 27.5mm of rain (92% probability) expected on 2026-10-01 in the Amaravathi Dam catchment area. Monitor dam levels for rising trend.",
+    "areaName": "Amaravathi Dam catchment - Tiruppur",
+    "lat": 10.4333,
+    "lng": 77.2667,
+    "predictedAt": "2026-09-29T12:14:47.514Z",
+    "predictedFor": "2026-10-01T06:30:00.000Z",
+    "timeframeHours": 72,
+    "confidence": 54,
+    "factors": [
+      "Forecast rainfall: 27.5mm",
+      "Rain probability: 92%",
+      "Current dam fill: 47.6%",
+      "Max wind: 12.1 km/h"
+    ],
+    "recommendedActions": [
+      "Pre-position flood rescue assets",
+      "Prepare controlled release from Amaravathi Dam to create buffer",
+      "Issue advance flood warning for Tiruppur"
+    ],
+    "source": "weather-forecast"
+  }
+]
