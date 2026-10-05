@@ -8,7 +8,7 @@
     "lat": 13.0827,
     "lng": 80.2707,
     "status": "online",
-    "lastSeen": "2026-09-29T12:15:48.366Z"
+    "lastSeen": "2026-10-03T18:59:12.038Z"
   },
   {
     "id": "CTL-MADURAI",
@@ -19,7 +19,7 @@
     "lat": 9.9252,
     "lng": 78.1198,
     "status": "online",
-    "lastSeen": "2026-09-29T12:15:48.366Z"
+    "lastSeen": "2026-10-03T18:59:12.038Z"
   },
   {
     "id": "CTL-COIMBATORE",
@@ -30,7 +30,7 @@
     "lat": 11.0168,
     "lng": 76.9558,
     "status": "online",
-    "lastSeen": "2026-09-29T12:15:48.366Z"
+    "lastSeen": "2026-10-03T18:59:12.038Z"
   },
   {
     "id": "CTL-SALEM",
@@ -41,6 +41,6 @@
     "lat": 11.6643,
     "lng": 78.146,
     "status": "online",
-    "lastSeen": "2026-09-29T12:15:48.366Z"
+    "lastSeen": "2026-10-03T18:59:12.038Z"
   }
 ]

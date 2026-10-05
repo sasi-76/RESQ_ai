@@ -1,6 +1,13 @@
+"""
+Hospital & Blood Bank Scraper — Tamil Nadu
+Sources: NHM TN, NHP facilities, eRaktKosh
+All data is real — no mock/random fallbacks.
+"""
+
 import time
 import logging
-from scrapling import Fetcher
+
+from scrapers.fetch_utils import resilient_fetch, with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +23,9 @@ TN_DISTRICTS = [
     "Hassan", "Mandya", "Mysuru",
 ]
 
+# Verified government hospital registry — real static data from public records.
+# Bed counts are official sanctioned capacities; availableBeds is set to None
+# (unknown) until a real-time source populates it.
 KNOWN_HOSPITALS = [
     {"name": "Rajiv Gandhi Govt. General Hospital", "city": "Chennai", "district": "Chennai", "lat": 13.0784, "lng": 80.2750, "type": "Govt. Medical College & Apex Trauma", "beds": 2800, "emergency": True, "phone": "+91 44 2530 5000"},
     {"name": "Govt. Stanley Medical College Hospital", "city": "Chennai", "district": "Chennai", "lat": 13.1090, "lng": 80.2880, "type": "Govt. Medical College & Trauma", "beds": 1600, "emergency": True, "phone": "+91 44 2528 1351"},
@@ -52,73 +62,65 @@ KNOWN_HOSPITALS = [
 ]
 
 
-def _estimate_available_beds(total_beds):
-    import random
-    occupancy = random.uniform(0.65, 0.90)
-    return max(0, int(total_beds * (1 - occupancy)))
-
-
+@with_retry
 def scrape_hospital_data():
     now = time.time()
     if _hospital_cache["data"] and (now - _hospital_cache["ts"]) < HOSPITAL_CACHE_TTL:
         logger.info("Returning cached hospital data")
         return _hospital_cache["data"]
 
-    hospitals = []
+    scraped_hospitals = []
 
-    try:
-        page = Fetcher.get("https://nhm.tn.gov.in/en/medical-services/government-hospitals/", timeout=15, verify=False)
-        if page and page.status == 200:
-            rows = page.css("table tr")
-            for row in rows[1:]:
-                cells = row.css("td")
-                if len(cells) >= 3:
-                    name = cells[0].text.strip() if cells[0].text else ""
-                    district = cells[1].text.strip() if len(cells) > 1 and cells[1].text else ""
-                    if name and district:
-                        hospitals.append({
-                            "name": name,
-                            "district": district,
-                            "source": "nhm.tn.gov.in",
-                            "scraped": True,
-                        })
-            logger.info(f"Scraped {len(hospitals)} hospitals from NHM TN")
-    except Exception as e:
-        logger.warning(f"NHM TN scrape failed: {e}")
+    # Source 1: NHM TN government hospital list
+    page = resilient_fetch("https://nhm.tn.gov.in/en/medical-services/government-hospitals/")
+    if page:
+        rows = page.css("table tr")
+        for row in rows[1:]:
+            cells = row.css("td")
+            if len(cells) >= 3:
+                name = cells[0].text.strip() if cells[0].text else ""
+                district = cells[1].text.strip() if len(cells) > 1 and cells[1].text else ""
+                if name and district:
+                    scraped_hospitals.append({
+                        "name": name,
+                        "district": district,
+                        "source": "nhm.tn.gov.in",
+                    })
+        logger.info("Scraped %d hospitals from NHM TN", len(scraped_hospitals))
 
-    try:
-        for district in TN_DISTRICTS[:6]:
-            url = f"https://facilities.nhp.gov.in/facilities?district={district}&state=Tamil+Nadu&type=Hospital"
-            page = Fetcher.get(url, timeout=15, verify=False)
-            if page and page.status == 200:
-                cards = page.css(".facility-card, .card, .list-item, tr.facility-row")
-                for card in cards[:10]:
-                    name_els = card.css(".facility-name, .name, h4, td:first-child")
-                    name_el = name_els[0] if name_els else None
-                    if name_el and name_el.text:
-                        hospitals.append({
-                            "name": name_el.text.strip(),
-                            "district": district,
-                            "source": "facilities.nhp.gov.in",
-                            "scraped": True,
-                        })
-                logger.info(f"Scraped facilities for {district} from NHP")
-    except Exception as e:
-        logger.warning(f"NHP facility scrape failed: {e}")
+    # Source 2: NHP facility search per district
+    for district in TN_DISTRICTS[:6]:
+        page = resilient_fetch(
+            f"https://facilities.nhp.gov.in/facilities?district={district}&state=Tamil+Nadu&type=Hospital"
+        )
+        if page:
+            cards = page.css(".facility-card, .card, .list-item, tr.facility-row")
+            for card in cards[:10]:
+                name_els = card.css(".facility-name, .name, h4, td:first-child")
+                name_el = name_els[0] if name_els else None
+                if name_el and name_el.text:
+                    scraped_hospitals.append({
+                        "name": name_el.text.strip(),
+                        "district": district,
+                        "source": "facilities.nhp.gov.in",
+                    })
+            logger.info("Scraped NHP facilities for %s", district)
 
+    # Build result: start with verified registry (real static data)
+    # availableBeds = None means "unknown" — no random estimation
     known_enriched = []
     for h in KNOWN_HOSPITALS:
-        available = _estimate_available_beds(h["beds"])
         known_enriched.append({
             **h,
-            "availableBeds": available,
+            "availableBeds": None,
             "status": "operational",
             "source": "verified-registry",
             "lastUpdated": time.strftime("%Y-%m-%dT%H:%M:%S+05:30"),
         })
 
+    # Merge scraped hospitals that aren't already in registry
     scraped_names = {h["name"].lower() for h in known_enriched}
-    for sh in hospitals:
+    for sh in scraped_hospitals:
         if sh["name"].lower() not in scraped_names:
             known_enriched.append({
                 "name": sh["name"],
@@ -128,7 +130,7 @@ def scrape_hospital_data():
                 "lng": 0,
                 "type": "Government Hospital",
                 "beds": 0,
-                "availableBeds": 0,
+                "availableBeds": None,
                 "emergency": True,
                 "phone": "",
                 "status": "operational",
@@ -138,10 +140,11 @@ def scrape_hospital_data():
 
     _hospital_cache["data"] = known_enriched
     _hospital_cache["ts"] = now
-    logger.info(f"Hospital data ready: {len(known_enriched)} facilities total")
+    logger.info("Hospital data ready: %d facilities total", len(known_enriched))
     return known_enriched
 
 
+@with_retry
 def scrape_blood_bank_availability():
     now = time.time()
     if _blood_bank_cache["data"] and (now - _blood_bank_cache["ts"]) < BLOOD_BANK_CACHE_TTL:
@@ -150,47 +153,41 @@ def scrape_blood_bank_availability():
 
     blood_banks = []
 
-    try:
-        page = Fetcher.get("https://eraktkosh.in/BLDAHIMS/bloodbank/transactions/haboralilogin.html", timeout=15, verify=False)
-        if page and page.status == 200:
-            rows = page.css("table tr")
-            for row in rows[1:30]:
-                cells = row.css("td")
-                if len(cells) >= 4:
-                    bank_name = cells[0].text.strip() if cells[0].text else ""
-                    district = cells[1].text.strip() if cells[1].text else ""
-                    if bank_name and any(d.lower() in district.lower() for d in TN_DISTRICTS):
-                        blood_banks.append({
-                            "bankName": bank_name,
-                            "district": district,
-                            "bloodGroups": {},
-                            "source": "eraktkosh.in",
-                            "lastUpdated": time.strftime("%Y-%m-%dT%H:%M:%S+05:30"),
-                        })
-            logger.info(f"Scraped {len(blood_banks)} blood banks from eRaktKosh")
-    except Exception as e:
-        logger.warning(f"eRaktKosh scrape failed: {e}")
+    # Source: eRaktKosh national blood bank database
+    page = resilient_fetch("https://eraktkosh.in/BLDAHIMS/bloodbank/transactions/haboralilogin.html")
+    if page:
+        rows = page.css("table tr")
+        for row in rows[1:30]:
+            cells = row.css("td")
+            if len(cells) >= 4:
+                bank_name = cells[0].text.strip() if cells[0].text else ""
+                district = cells[1].text.strip() if cells[1].text else ""
+                if bank_name and any(d.lower() in district.lower() for d in TN_DISTRICTS):
+                    # Try to extract blood group availability from remaining cells
+                    blood_groups = {}
+                    group_labels = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]
+                    for i, label in enumerate(group_labels):
+                        cell_idx = 2 + i
+                        if cell_idx < len(cells) and cells[cell_idx].text:
+                            try:
+                                blood_groups[label] = int(cells[cell_idx].text.strip())
+                            except (ValueError, TypeError):
+                                pass
 
+                    blood_banks.append({
+                        "bankName": bank_name,
+                        "district": district,
+                        "bloodGroups": blood_groups if blood_groups else None,
+                        "source": "eraktkosh.in",
+                        "lastUpdated": time.strftime("%Y-%m-%dT%H:%M:%S+05:30"),
+                    })
+        logger.info("Scraped %d blood banks from eRaktKosh", len(blood_banks))
+
+    # No mock fallback — return empty if scraping fails
     if not blood_banks:
-        import random
-        groups = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]
-        for district in ["Chennai", "Coimbatore", "Madurai", "Tiruchirappalli", "Salem", "Cuddalore"]:
-            blood_banks.append({
-                "bankName": f"{district} Govt. Blood Bank",
-                "district": district,
-                "bloodGroups": {g: random.randint(5, 80) for g in groups},
-                "source": "registry-fallback",
-                "lastUpdated": time.strftime("%Y-%m-%dT%H:%M:%S+05:30"),
-            })
-            blood_banks.append({
-                "bankName": f"Red Cross Blood Bank {district}",
-                "district": district,
-                "bloodGroups": {g: random.randint(3, 60) for g in groups},
-                "source": "registry-fallback",
-                "lastUpdated": time.strftime("%Y-%m-%dT%H:%M:%S+05:30"),
-            })
+        logger.warning("No blood bank data available — eRaktKosh scrape returned empty")
 
     _blood_bank_cache["data"] = blood_banks
     _blood_bank_cache["ts"] = now
-    logger.info(f"Blood bank data ready: {len(blood_banks)} banks")
+    logger.info("Blood bank data ready: %d banks", len(blood_banks))
     return blood_banks

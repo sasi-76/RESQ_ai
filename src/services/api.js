@@ -153,7 +153,20 @@ export async function fetchPredictions(filters = {}) {
   if (filters.severity) params.set('severity', filters.severity);
   if (filters.minProbability) params.set('minProbability', filters.minProbability);
   const query = params.toString() ? `?${params.toString()}` : '';
-  return apiCall(`/predictions${query}`);
+  // Return full response (data + meta) for staleness tracking
+  try {
+    const res = await fetch(`${BASE_URL}/predictions${query}`);
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Request failed');
+    return { predictions: json.data, meta: json.meta };
+  } catch (err) {
+    console.warn('[API] GET /predictions failed:', err.message);
+    return { predictions: [], meta: null };
+  }
+}
+
+export async function fetchPredictionHistory(limit = 50) {
+  return apiCall(`/predictions/history?limit=${limit}`);
 }
 
 export async function fetchPredictionSummary() {

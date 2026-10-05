@@ -1,8 +1,15 @@
+"""
+Disaster News Scraper — Tamil Nadu
+Sources: Google News RSS, Times of India, The Hindu
+Uses RSS feeds where possible (stable), HTML scraping as supplement.
+"""
+
 import time
 import logging
 import xml.etree.ElementTree as ET
 from datetime import datetime
-from scrapling import Fetcher
+
+from scrapers.fetch_utils import resilient_fetch, with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +24,12 @@ DISASTER_QUERIES = [
     "Tamil Nadu rain warning",
     "Chennai flood",
     "Tamil Nadu NDRF",
+]
+
+DISASTER_KEYWORDS = [
+    "flood", "rain", "cyclone", "earthquake", "disaster", "rescue",
+    "warning", "alert", "storm", "damage", "relief", "NDRF",
+    "evacuation", "water", "dam", "submerge", "inundate",
 ]
 
 
@@ -39,18 +52,18 @@ def _parse_rss_date(date_str):
 
 
 def _fetch_google_news_rss(query):
+    """Fetch news via Google News RSS feed — stable, no fragile CSS selectors."""
     articles = []
     encoded = query.replace(" ", "+")
     url = f"https://news.google.com/rss/search?q={encoded}&hl=en-IN&gl=IN&ceid=IN:en"
 
-    try:
-        page = Fetcher.get(url, timeout=15)
-        if not page or page.status != 200:
-            logger.warning(f"Google News RSS returned status {page.status if page else 'None'} for '{query}'")
-            return articles
+    page = resilient_fetch(url, max_retries=2)
+    if not page:
+        logger.warning("Google News RSS unavailable for '%s'", query)
+        return articles
 
+    try:
         root = ET.fromstring(page.body.decode("utf-8", errors="replace"))
-        ns = {"atom": "http://www.w3.org/2005/Atom"}
 
         for item in root.iter("item"):
             title_el = item.find("title")
@@ -80,99 +93,106 @@ def _fetch_google_news_rss(query):
                 "query": query,
             })
 
-        logger.info(f"Google News RSS: {len(articles)} articles for '{query}'")
+        logger.info("Google News RSS: %d articles for '%s'", len(articles), query)
     except ET.ParseError as e:
-        logger.warning(f"RSS parse error for '{query}': {e}")
+        logger.warning("RSS parse error for '%s': %s", query, e)
     except Exception as e:
-        logger.warning(f"Google News fetch failed for '{query}': {e}")
+        logger.warning("Google News fetch failed for '%s': %s", query, e)
 
     return articles
 
 
 def _scrape_times_of_india():
+    """Scrape TOI Chennai section for disaster-related headlines."""
     articles = []
 
-    try:
-        page = Fetcher.get("https://timesofindia.indiatimes.com/city/chennai", timeout=15)
-        if page and page.status == 200:
-            links = page.css("a[href*='/articleshow/']")
-            seen = set()
-            for link in links[:30]:
-                title = link.text.strip() if link.text else ""
-                href = link.attrib.get("href", "")
-                if not title or len(title) < 15 or title in seen:
-                    continue
-                disaster_keywords = ["flood", "rain", "cyclone", "earthquake", "disaster", "rescue",
-                                     "warning", "alert", "storm", "damage", "relief", "NDRF",
-                                     "evacuation", "water", "dam", "submerge", "inundate"]
-                if any(kw in title.lower() for kw in disaster_keywords):
-                    seen.add(title)
-                    full_url = href if href.startswith("http") else f"https://timesofindia.indiatimes.com{href}"
-                    articles.append({
-                        "title": title,
-                        "summary": "",
-                        "url": full_url,
-                        "publishedAt": datetime.utcnow().isoformat() + "Z",
-                        "source": "Times of India",
-                        "query": "TOI Chennai disaster",
-                    })
-            logger.info(f"TOI: {len(articles)} disaster-related articles")
-    except Exception as e:
-        logger.warning(f"TOI scrape failed: {e}")
+    page = resilient_fetch("https://timesofindia.indiatimes.com/city/chennai")
+    if not page:
+        return articles
+
+    # TOI article links contain /articleshow/ — this is a stable URL pattern
+    links = page.css("a[href*='/articleshow/']")
+    seen = set()
+    for link in links[:30]:
+        title = link.text.strip() if link.text else ""
+        href = link.attrib.get("href", "")
+        if not title or len(title) < 15 or title in seen:
+            continue
+        if any(kw in title.lower() for kw in DISASTER_KEYWORDS):
+            seen.add(title)
+            full_url = href if href.startswith("http") else f"https://timesofindia.indiatimes.com{href}"
+            articles.append({
+                "title": title,
+                "summary": "",
+                "url": full_url,
+                "publishedAt": datetime.utcnow().isoformat() + "Z",
+                "source": "Times of India",
+                "query": "TOI Chennai disaster",
+            })
+    logger.info("TOI: %d disaster-related articles", len(articles))
 
     return articles
 
 
 def _scrape_the_hindu():
+    """Scrape The Hindu TN section for disaster-related headlines."""
     articles = []
 
-    try:
-        page = Fetcher.get("https://www.thehindu.com/news/national/tamil-nadu/", timeout=15)
-        if page and page.status == 200:
-            links = page.css("a[href*='/article']")
-            seen = set()
-            for link in links[:30]:
-                title = link.text.strip() if link.text else ""
-                href = link.attrib.get("href", "")
-                if not title or len(title) < 15 or title in seen:
-                    continue
-                disaster_keywords = ["flood", "rain", "cyclone", "earthquake", "disaster", "rescue",
-                                     "warning", "alert", "storm", "damage", "relief", "NDRF",
-                                     "evacuation", "water", "dam", "submerge", "inundate"]
-                if any(kw in title.lower() for kw in disaster_keywords):
-                    seen.add(title)
-                    full_url = href if href.startswith("http") else f"https://www.thehindu.com{href}"
-                    articles.append({
-                        "title": title,
-                        "summary": "",
-                        "url": full_url,
-                        "publishedAt": datetime.utcnow().isoformat() + "Z",
-                        "source": "The Hindu",
-                        "query": "The Hindu TN disaster",
-                    })
-            logger.info(f"The Hindu: {len(articles)} disaster-related articles")
-    except Exception as e:
-        logger.warning(f"The Hindu scrape failed: {e}")
+    page = resilient_fetch("https://www.thehindu.com/news/national/tamil-nadu/")
+    if not page:
+        return articles
+
+    # The Hindu article links contain /article — stable URL pattern
+    links = page.css("a[href*='/article']")
+    seen = set()
+    for link in links[:30]:
+        title = link.text.strip() if link.text else ""
+        href = link.attrib.get("href", "")
+        if not title or len(title) < 15 or title in seen:
+            continue
+        if any(kw in title.lower() for kw in DISASTER_KEYWORDS):
+            seen.add(title)
+            full_url = href if href.startswith("http") else f"https://www.thehindu.com{href}"
+            articles.append({
+                "title": title,
+                "summary": "",
+                "url": full_url,
+                "publishedAt": datetime.utcnow().isoformat() + "Z",
+                "source": "The Hindu",
+                "query": "The Hindu TN disaster",
+            })
+    logger.info("The Hindu: %d disaster-related articles", len(articles))
 
     return articles
 
 
+@with_retry
 def scrape_disaster_news(query="Tamil Nadu disaster"):
     cache_key = query.lower().strip()
     now = time.time()
     if cache_key in _news_cache and (now - _news_cache[cache_key]["ts"]) < NEWS_CACHE_TTL:
-        logger.info(f"Returning cached news for '{query}'")
+        logger.info("Returning cached news for '%s'", query)
         return _news_cache[cache_key]["data"]
 
     all_articles = []
 
+    # Primary source: Google News RSS (stable, structured)
     for q in DISASTER_QUERIES:
         articles = _fetch_google_news_rss(q)
         all_articles.extend(articles)
 
-    all_articles.extend(_scrape_times_of_india())
-    all_articles.extend(_scrape_the_hindu())
+    # Supplementary: newspaper HTML scraping (uses stable URL-pattern selectors)
+    try:
+        all_articles.extend(_scrape_times_of_india())
+    except Exception as e:
+        logger.warning("TOI scrape failed: %s", e)
 
+    try:
+        all_articles.extend(_scrape_the_hindu())
+    except Exception as e:
+        logger.warning("The Hindu scrape failed: %s", e)
+
+    # Deduplicate by title
     seen_titles = set()
     unique = []
     for a in all_articles:
@@ -185,5 +205,5 @@ def scrape_disaster_news(query="Tamil Nadu disaster"):
     unique = unique[:20]
 
     _news_cache[cache_key] = {"data": unique, "ts": now}
-    logger.info(f"News data ready: {len(unique)} unique articles")
+    logger.info("News data ready: %d unique articles", len(unique))
     return unique

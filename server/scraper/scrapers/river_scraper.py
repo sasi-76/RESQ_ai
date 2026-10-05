@@ -1,19 +1,18 @@
 """
 River Water Level Scraper
-Sources: India-Water.gov.in (CWC Flood Forecasting), India-WRIS
-Replaces mock fetchRiverLevelData with real gauge readings.
+Sources: India-Water.gov.in (CWC Flood Forecasting), CWC, India-WRIS
+All data from real government gauge stations — no mock data.
 """
 
 import time
-import re
 import logging
 from datetime import datetime, timezone
 
-from scrapling import Fetcher
+from scrapers.fetch_utils import resilient_fetch, with_retry
 
 logger = logging.getLogger(__name__)
 
-# ── Cache ────────────────────────────────────────────────────────────────────
+# -- Cache --------------------------------------------------------------------
 
 _river_cache = {"data": [], "ts": 0}
 RIVER_TTL = 1200  # 20 minutes
@@ -52,8 +51,9 @@ KNOWN_DANGER_LEVELS = {
 }
 
 
-# ── Main Scraper ─────────────────────────────────────────────────────────────
+# -- Main Scraper -------------------------------------------------------------
 
+@with_retry
 def scrape_river_levels() -> list[dict]:
     now = time.time()
     if _river_cache["data"] and (now - _river_cache["ts"]) < RIVER_TTL:
@@ -101,9 +101,8 @@ def _scrape_ffs_levels() -> list[dict]:
     url = "https://ffs.india-water.gov.in"
     logger.info("[RiverScraper] Fetching FFS river levels: %s", url)
 
-    page = Fetcher.get(url, timeout=20, verify=False)
-    if page.status != 200:
-        logger.warning("[RiverScraper] FFS returned HTTP %d", page.status)
+    page = resilient_fetch(url, timeout=20)
+    if not page:
         return results
 
     # FFS shows station data in tables
@@ -131,29 +130,29 @@ def _scrape_ffs_levels() -> list[dict]:
 def _scrape_cwc_realtime() -> list[dict]:
     """Scrape from CWC real-time flood monitoring."""
     results = []
-    url = "https://cwc.gov.in/sites/default/files/flood-situation-report.pdf"
     logger.info("[RiverScraper] Fetching CWC data page")
 
-    # Try the main CWC page for station data
-    try:
-        page = Fetcher.get("https://cwc.gov.in", timeout=15, verify=False)
-        if page.status != 200:
-            return results
+    page = resilient_fetch("https://cwc.gov.in")
+    if not page:
+        return results
 
-        # Look for links to flood situation or real-time data
-        links = page.css("a")
-        for link in links:
-            href = link.attrib.get("href", "")
-            text = link.text.lower()
-            if any(kw in text for kw in ["real time", "realtime", "flood situation", "river level"]):
-                target_url = page.urljoin(href) if href.startswith("/") else href
-                if target_url.startswith("http"):
-                    sub_results = _scrape_data_page(target_url)
-                    results.extend(sub_results)
-                    if len(results) > 0:
-                        break
-    except Exception as e:
-        logger.warning("[RiverScraper] CWC page scrape failed: %s", e)
+    # Look for links to flood situation or real-time data
+    links = page.css("a")
+    for link in links:
+        href = link.attrib.get("href", "")
+        text = (link.text or "").lower()
+        if any(kw in text for kw in ["real time", "realtime", "flood situation", "river level"]):
+            if href.startswith("/"):
+                target_url = f"https://cwc.gov.in{href}"
+            elif href.startswith("http"):
+                target_url = href
+            else:
+                continue
+
+            sub_results = _scrape_data_page(target_url)
+            results.extend(sub_results)
+            if len(results) > 0:
+                break
 
     return results
 
@@ -164,29 +163,26 @@ def _scrape_wris_levels() -> list[dict]:
     url = "https://indiawris.gov.in/wris"
     logger.info("[RiverScraper] Fetching WRIS data: %s", url)
 
-    try:
-        page = Fetcher.get(url, timeout=15, verify=False)
-        if page.status != 200:
-            return results
+    page = resilient_fetch(url)
+    if not page:
+        return results
 
-        rows = page.css("table tr")
-        for row in rows:
-            cells = row.css("td")
-            if len(cells) < 3:
-                continue
+    rows = page.css("table tr")
+    for row in rows:
+        cells = row.css("td")
+        if len(cells) < 3:
+            continue
 
-            cell_texts = [c.text.strip() for c in cells]
-            row_text = " ".join(cell_texts).lower()
+        cell_texts = [c.text.strip() for c in cells]
+        row_text = " ".join(cell_texts).lower()
 
-            matched_river = _match_river(row_text)
-            if not matched_river:
-                continue
+        matched_river = _match_river(row_text)
+        if not matched_river:
+            continue
 
-            level = _parse_station_row(cell_texts, matched_river)
-            if level:
-                results.append(level)
-    except Exception as e:
-        logger.warning("[RiverScraper] WRIS scrape failed: %s", e)
+        level = _parse_station_row(cell_texts, matched_river)
+        if level:
+            results.append(level)
 
     return results
 
@@ -194,49 +190,39 @@ def _scrape_wris_levels() -> list[dict]:
 def _scrape_data_page(url: str) -> list[dict]:
     """Generic table scraper for a data page URL."""
     results = []
-    try:
-        page = Fetcher.get(url, timeout=15, verify=False)
-        if page.status != 200:
-            return results
 
-        rows = page.css("table tr")
-        for row in rows:
-            cells = row.css("td")
-            if len(cells) < 3:
-                continue
+    page = resilient_fetch(url, max_retries=1)
+    if not page:
+        return results
 
-            cell_texts = [c.text.strip() for c in cells]
-            row_text = " ".join(cell_texts).lower()
+    rows = page.css("table tr")
+    for row in rows:
+        cells = row.css("td")
+        if len(cells) < 3:
+            continue
 
-            matched_river = _match_river(row_text)
-            if not matched_river:
-                continue
+        cell_texts = [c.text.strip() for c in cells]
+        row_text = " ".join(cell_texts).lower()
 
-            level = _parse_station_row(cell_texts, matched_river)
-            if level:
-                results.append(level)
-    except Exception as e:
-        logger.warning("[RiverScraper] Data page %s failed: %s", url, e)
+        matched_river = _match_river(row_text)
+        if not matched_river:
+            continue
+
+        level = _parse_station_row(cell_texts, matched_river)
+        if level:
+            results.append(level)
 
     return results
 
 
-# ── Parsing Helpers ──────────────────────────────────────────────────────────
+# -- Parsing Helpers ----------------------------------------------------------
 
 def _match_river(text: str) -> str | None:
     text = text.lower()
-    # Also filter for Tamil Nadu context
-    is_tn = any(kw in text for kw in [
-        "tamil", "tn", "chennai", "salem", "erode", "trichy", "madurai",
-        "coimbatore", "tiruppur", "theni", "cuddalore", "tiruvannamalai",
-        "kanyakumari", "tiruvallur", "chengalpattu", "nagapattinam",
-        "thanjavur",
-    ])
 
     for river_id, info in TN_RIVERS.items():
         for alias in info["aliases"]:
             if alias in text:
-                # If no TN context clue, still match — these rivers are TN rivers
                 return river_id
 
     return None

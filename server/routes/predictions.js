@@ -3,7 +3,7 @@ const router = express.Router();
 const { readDB } = require('../db');
 const { runDisasterPrediction } = require('../services/disasterPredictor');
 
-// GET /api/predictions — return all current predictions
+// GET /api/predictions — return all current predictions with staleness info
 router.get('/', (req, res) => {
   try {
     const predictions = readDB('predictions.json');
@@ -22,7 +22,24 @@ router.get('/', (req, res) => {
       filtered = filtered.filter(p => p.probability >= min);
     }
 
-    res.json({ success: true, data: filtered });
+    // Attach staleness metadata
+    let meta = {};
+    try { meta = readDB('predictionMeta.json') || {}; } catch { /* ignore */ }
+
+    const lastCycleAt = meta.lastCycleAt || null;
+    const dataAgeMs = lastCycleAt ? Date.now() - new Date(lastCycleAt).getTime() : null;
+    const isStale = dataAgeMs !== null && dataAgeMs > 15 * 60 * 1000; // >15 min = stale
+
+    res.json({
+      success: true,
+      data: filtered,
+      meta: {
+        lastCycleAt,
+        dataAgeMs,
+        dataAgeMinutes: dataAgeMs !== null ? Math.round(dataAgeMs / 60000) : null,
+        isStale,
+      },
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -33,6 +50,9 @@ router.get('/summary', (req, res) => {
   try {
     const predictions = readDB('predictions.json');
 
+    let meta = {};
+    try { meta = readDB('predictionMeta.json') || {}; } catch { /* ignore */ }
+
     const summary = {
       total: predictions.length,
       byType: {},
@@ -41,9 +61,7 @@ router.get('/summary', (req, res) => {
       averageProbability: predictions.length
         ? Math.round(predictions.reduce((s, p) => s + p.probability, 0) / predictions.length)
         : 0,
-      lastUpdated: predictions.length
-        ? predictions[0].predictedAt
-        : null,
+      lastUpdated: meta.lastCycleAt || (predictions.length ? predictions[0].predictedAt : null),
     };
 
     for (const pred of predictions) {
@@ -62,6 +80,36 @@ router.post('/refresh', async (req, res) => {
   try {
     const result = await runDisasterPrediction();
     res.json({ success: true, data: result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/predictions/history — prediction outcome tracking
+router.get('/history', (req, res) => {
+  try {
+    let history = [];
+    try { history = readDB('predictionHistory.json') || []; } catch { /* ignore */ }
+
+    const limit = parseInt(req.query.limit, 10) || 50;
+    const sliced = history.slice(0, limit);
+
+    // Calibration stats
+    const materialized = sliced.filter(h => h.outcome === 'materialized').length;
+    const total = sliced.length;
+
+    res.json({
+      success: true,
+      data: sliced,
+      calibration: {
+        total,
+        materialized,
+        accuracy: total > 0 ? Math.round((materialized / total) * 100) : null,
+        note: total < 10
+          ? 'Insufficient data for reliable calibration'
+          : `${materialized}/${total} predictions materialized (${Math.round((materialized / total) * 100)}%)`,
+      },
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

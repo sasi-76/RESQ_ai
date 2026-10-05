@@ -19,6 +19,7 @@ import {
   Radio,
   Droplets,
   Brain,
+  CreditCard,
 } from 'lucide-react';
 
 const navItems = [
@@ -31,6 +32,7 @@ const navItems = [
   { to: '/dams', icon: Droplets, label: 'Dams' },
   { to: '/predictions', icon: Brain, label: 'Predictions' },
   { to: '/reports', icon: FileText, label: 'EOC Reports' },
+  { to: '/pricing', icon: CreditCard, label: 'Pricing' },
   { to: '/admin', icon: Shield, label: 'AI Admin' },
   { to: '/demo', icon: Zap, label: 'Demo Controls' },
 ];

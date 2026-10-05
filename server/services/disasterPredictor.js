@@ -25,6 +25,28 @@ function hoursFromNow(hours) {
   return new Date(Date.now() + hours * 3600 * 1000).toISOString();
 }
 
+/**
+ * Haversine distance in km — proper geodesic calculation.
+ * Replaces the old Euclidean degree-based approximation.
+ */
+function haversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// Known storage-only reservoirs that normally have zero outflow.
+// These should NOT trigger rapid-filling alerts on low inflow.
+const STORAGE_RESERVOIRS = new Set([
+  'poondi', 'redhills', 'chembarambakkam',
+]);
+
 // ── Flood Prediction (Dam trend + rainfall forecast) ─────────────────────────
 
 async function fetchRainfallForecast(lat, lng) {
@@ -48,6 +70,7 @@ function predictFloodForDam(dam, forecastData) {
   const predictions = [];
   const fillPercent = (dam.storage / dam.capacity) * 100;
   const netFlow = dam.inflow - dam.outflow;
+  const isStorageReservoir = STORAGE_RESERVOIRS.has(dam.id);
 
   // ── Trend-based: estimate when dam reaches critical levels ────────────
   if (netFlow > 0 && fillPercent < 100) {
@@ -131,12 +154,35 @@ function predictFloodForDam(dam, forecastData) {
   }
 
   // ── Rapid filling compound risk ─────────────────────────────────────────
-  if (dam.inflow > dam.outflow * 2.5 && fillPercent > 70) {
-    const prob = clamp(
-      40 + (fillPercent - 70) * 1.5 + ((dam.inflow / Math.max(dam.outflow, 1)) - 2) * 10,
-      40,
-      95
-    );
+  // For storage reservoirs (Poondi, Red Hills, Chembarambakkam) with zero outflow,
+  // only trigger if inflow is genuinely high (>500 cusecs) AND fill is high.
+  // These reservoirs normally have outflow=0 — that's not an emergency.
+  const inflowOutflowRatio = dam.outflow > 0
+    ? dam.inflow / dam.outflow
+    : null;
+
+  let triggerRapidFilling = false;
+  if (isStorageReservoir) {
+    // Storage reservoir: only alert on genuinely dangerous inflow
+    triggerRapidFilling = dam.inflow > 500 && fillPercent > 80;
+  } else if (inflowOutflowRatio !== null) {
+    // Normal dam: original logic — inflow > 2.5x outflow at high fill
+    triggerRapidFilling = inflowOutflowRatio > 2.5 && fillPercent > 70;
+  }
+
+  if (triggerRapidFilling) {
+    const ratioDisplay = inflowOutflowRatio !== null
+      ? `${inflowOutflowRatio.toFixed(1)}x outflow`
+      : `${dam.inflow.toLocaleString()} cusecs (zero outflow)`;
+
+    const prob = isStorageReservoir
+      ? clamp(35 + (fillPercent - 80) * 2 + Math.min(dam.inflow / 100, 20), 35, 90)
+      : clamp(
+          40 + (fillPercent - 70) * 1.5 + (inflowOutflowRatio - 2) * 10,
+          40,
+          95
+        );
+
     predictions.push({
       id: generateId(),
       type: 'flood',
@@ -144,21 +190,24 @@ function predictFloodForDam(dam, forecastData) {
       severity: severityFromProbability(prob),
       probability: Math.round(prob),
       title: `Rapid filling at ${dam.name}`,
-      description: `Inflow (${dam.inflow.toLocaleString()} cusecs) vastly exceeds outflow (${dam.outflow.toLocaleString()} cusecs). Combined with ${fillPercent.toFixed(1)}% fill level, risk of emergency spillway activation is elevated.`,
+      description: `Inflow (${dam.inflow.toLocaleString()} cusecs) ${isStorageReservoir ? 'is high for this storage reservoir' : `vastly exceeds outflow (${dam.outflow.toLocaleString()} cusecs)`}. At ${fillPercent.toFixed(1)}% fill, risk of emergency spillway activation is elevated.`,
       areaName: `${dam.name} - ${dam.district}`,
       lat: dam.lat,
       lng: dam.lng,
       predictedAt: new Date().toISOString(),
       predictedFor: hoursFromNow(12),
       timeframeHours: 12,
-      confidence: 70,
+      confidence: isStorageReservoir ? 60 : 70,
       factors: [
-        `Inflow/outflow ratio: ${(dam.inflow / Math.max(dam.outflow, 1)).toFixed(1)}x`,
+        `Inflow: ${ratioDisplay}`,
         `Fill level: ${fillPercent.toFixed(1)}%`,
         `River: ${dam.river}`,
-      ],
+        isStorageReservoir ? 'Storage reservoir (zero outflow is normal operation)' : null,
+      ].filter(Boolean),
       recommendedActions: [
-        'Increase controlled outflow immediately',
+        isStorageReservoir
+          ? 'Begin controlled release to downstream channels'
+          : 'Increase controlled outflow immediately',
         'Alert all downstream riverside settlements',
         'Deploy water-level monitoring along river path',
       ],
@@ -259,7 +308,7 @@ function predictFloodForDam(dam, forecastData) {
 
 // ── Earthquake Prediction (Frequency / Clustering Analysis) ──────────────────
 
-async function predictEarthquakes(disasters, details) {
+async function predictEarthquakes(_disasters, details) {
   const predictions = [];
 
   try {
@@ -408,12 +457,12 @@ function predictCompoundRisks(dams, disasters) {
 
   for (const dam of dams) {
     const fillPercent = (dam.storage / dam.capacity) * 100;
+
+    // Use proper haversine distance instead of Euclidean degree approximation
     const nearbyDisasters = activeDisasters.filter(d => {
       if (!d.lat || !d.lng) return false;
-      const dist = Math.sqrt(
-        Math.pow(d.lat - dam.lat, 2) + Math.pow(d.lng - dam.lng, 2)
-      );
-      return dist < 1.5; // ~150km radius approximation
+      const distKm = haversineKm(d.lat, d.lng, dam.lat, dam.lng);
+      return distKm < 150; // 150km radius
     });
 
     if (nearbyDisasters.length > 0 && fillPercent > 65) {
@@ -421,13 +470,36 @@ function predictCompoundRisks(dams, disasters) {
       const hasCyclone = nearbyDisasters.some(d => d.type === 'cyclone');
       const hasEarthquake = nearbyDisasters.some(d => d.type === 'earthquake');
 
-      let prob = 30 + nearbyDisasters.length * 10 + (fillPercent - 65) * 0.8;
-      if (hasFlood && fillPercent > 80) prob += 15;
-      if (hasCyclone) prob += 20;
-      if (hasEarthquake) prob += 10; // dam structural risk
-      prob = clamp(prob, 25, 95);
+      // Count unique disaster types, not raw count — prevents saturation
+      // when the disaster DB accumulates many entries of the same type.
+      const uniqueTypes = [...new Set(nearbyDisasters.map(d => d.type))];
+      const uniqueCount = uniqueTypes.length;
 
-      const types = [...new Set(nearbyDisasters.map(d => d.type))].join(', ');
+      // Base probability from distinct hazard types (not raw count)
+      let prob = 25 + uniqueCount * 15 + (fillPercent - 65) * 0.6;
+
+      // Bonuses for specific dangerous combos
+      if (hasFlood && fillPercent > 80) prob += 12;
+      if (hasCyclone) prob += 15;
+      if (hasEarthquake) prob += 10; // dam structural risk
+
+      prob = clamp(prob, 25, 90);
+
+      // Dynamic confidence based on data quality signals
+      let confidence = 40;
+      // More distinct hazard types → more data supporting compound risk
+      confidence += uniqueCount * 8;
+      // Higher dam fill → more reliable the prediction
+      if (fillPercent > 80) confidence += 10;
+      else if (fillPercent > 70) confidence += 5;
+      // Recent disasters (created in last 6h) are more reliable signals
+      const recentDisasters = nearbyDisasters.filter(
+        d => new Date(d.createdAt).getTime() > Date.now() - 6 * 3600 * 1000
+      );
+      if (recentDisasters.length > 0) confidence += 8;
+      confidence = clamp(confidence, 30, 80);
+
+      const types = uniqueTypes.join(', ');
       predictions.push({
         id: generateId(),
         type: 'compound',
@@ -435,17 +507,17 @@ function predictCompoundRisks(dams, disasters) {
         severity: severityFromProbability(prob),
         probability: Math.round(prob),
         title: `Compound disaster risk: ${dam.name} area`,
-        description: `${nearbyDisasters.length} active disaster(s) (${types}) near ${dam.name} while dam is at ${fillPercent.toFixed(1)}% capacity. Multiple simultaneous hazards significantly increase the risk of cascading failures and complicate response operations.`,
+        description: `${uniqueCount} active hazard type(s) (${types}) within 150km of ${dam.name} while dam is at ${fillPercent.toFixed(1)}% capacity. Multiple simultaneous hazards significantly increase the risk of cascading failures and complicate response operations.`,
         areaName: `${dam.name} region - ${dam.district}`,
         lat: dam.lat,
         lng: dam.lng,
         predictedAt: new Date().toISOString(),
         predictedFor: hoursFromNow(24),
         timeframeHours: 24,
-        confidence: 55,
+        confidence,
         factors: [
-          `Active disasters nearby: ${nearbyDisasters.length}`,
-          `Disaster types: ${types}`,
+          `Active hazard types nearby: ${uniqueCount} (${types})`,
+          `Total active disasters within 150km: ${nearbyDisasters.length}`,
           `Dam fill: ${fillPercent.toFixed(1)}%`,
           hasEarthquake ? 'Earthquake may compromise dam structure' : null,
           hasCyclone ? 'Cyclone may bring additional rainfall' : null,
@@ -465,6 +537,73 @@ function predictCompoundRisks(dams, disasters) {
   return predictions;
 }
 
+// ── Prediction Expiry & Outcome Validation ──────────────────────────────────
+
+/**
+ * Check previous predictions against what actually happened.
+ * Moves expired predictions to a history file with outcome status.
+ */
+function validateAndExpirePredictions() {
+  let history = [];
+  try {
+    history = readDB('predictionHistory.json') || [];
+  } catch {
+    // File doesn't exist yet — that's fine
+  }
+
+  const oldPredictions = readDB('predictions.json') || [];
+  const now = Date.now();
+  const disasters = readDB('disasters.json') || [];
+
+  for (const pred of oldPredictions) {
+    const predictedForMs = new Date(pred.predictedFor).getTime();
+    const isExpired = predictedForMs < now;
+
+    if (!isExpired) continue;
+
+    // Check if this prediction materialized — did a matching disaster appear
+    // between when the prediction was made and when it was supposed to happen?
+    const predictedAtMs = new Date(pred.predictedAt).getTime();
+    const matchingDisaster = disasters.find(d => {
+      const createdMs = new Date(d.createdAt).getTime();
+      // Disaster appeared during the prediction window
+      if (createdMs < predictedAtMs || createdMs > predictedForMs + 6 * 3600000) return false;
+      // Same type
+      if (d.type !== pred.type) return false;
+      // Same area (fuzzy match)
+      if (pred.lat && pred.lng && d.lat && d.lng) {
+        return haversineKm(pred.lat, pred.lng, d.lat, d.lng) < 100;
+      }
+      return d.areaName && pred.areaName &&
+        d.areaName.toLowerCase().includes(pred.areaName.split(' - ')[0].toLowerCase());
+    });
+
+    history.unshift({
+      ...pred,
+      outcome: matchingDisaster ? 'materialized' : 'did_not_materialize',
+      matchedDisasterId: matchingDisaster?.id || null,
+      expiredAt: new Date().toISOString(),
+    });
+  }
+
+  // Keep last 200 history entries
+  history = history.slice(0, 200);
+
+  if (history.length > 0) {
+    writeDB('predictionHistory.json', history);
+
+    // Log calibration stats
+    const recent = history.slice(0, 50);
+    const materialized = recent.filter(h => h.outcome === 'materialized').length;
+    const total = recent.length;
+    if (total >= 5) {
+      console.log(`[Predictor] Calibration: ${materialized}/${total} recent predictions materialized (${((materialized / total) * 100).toFixed(0)}%)`);
+    }
+  }
+
+  return history;
+}
+
 // ── Main Prediction Runner ───────────────────────────────────────────────────
 
 async function runDisasterPrediction() {
@@ -475,6 +614,9 @@ async function runDisasterPrediction() {
   const disasters = readDB('disasters.json');
   const details = [];
   let allPredictions = [];
+
+  // 0. Validate and expire old predictions before generating new ones
+  validateAndExpirePredictions();
 
   // 1. Flood + cyclone predictions (per dam, with weather forecast)
   const damForecasts = await Promise.allSettled(
@@ -517,11 +659,27 @@ async function runDisasterPrediction() {
   }
   allPredictions = Array.from(seen.values());
 
+  // Filter out expired predictions (predictedFor is in the past)
+  const now = Date.now();
+  allPredictions = allPredictions.filter(p => {
+    const predictedForMs = new Date(p.predictedFor).getTime();
+    return predictedForMs > now;
+  });
+
   // Sort by probability descending
   allPredictions.sort((a, b) => b.probability - a.probability);
 
-  // Store predictions
+  // Store predictions with cycle metadata
   writeDB('predictions.json', allPredictions);
+
+  // Store cycle metadata for staleness tracking
+  const meta = { lastCycleAt: new Date().toISOString(), totalGenerated: allPredictions.length };
+  try {
+    const existing = readDB('predictionMeta.json') || {};
+    writeDB('predictionMeta.json', { ...existing, ...meta });
+  } catch {
+    writeDB('predictionMeta.json', meta);
+  }
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 

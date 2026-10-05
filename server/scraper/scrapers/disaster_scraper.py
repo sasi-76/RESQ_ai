@@ -1,6 +1,9 @@
 """
-Disaster Alert & News Scraper
-Sources: NDMA (ndma.gov.in), SACHET early warning, TN SDMA, news feeds
+Disaster Alert Scraper
+Sources: NDMA (ndma.gov.in), SACHET early warning, TN SDMA
+
+Note: News scraping is handled exclusively by news_scraper.py (RSS-based).
+This module focuses only on official government disaster alerts.
 """
 
 import time
@@ -8,18 +11,15 @@ import re
 import hashlib
 import logging
 from datetime import datetime, timezone
-from urllib.parse import quote_plus
 
-from scrapling import Fetcher
+from scrapers.fetch_utils import resilient_fetch, with_retry
 
 logger = logging.getLogger(__name__)
 
-# ── Cache ────────────────────────────────────────────────────────────────────
+# -- Cache --------------------------------------------------------------------
 
 _alerts_cache = {"data": [], "ts": 0}
-_news_cache = {"data": [], "ts": 0}
 ALERTS_TTL = 600    # 10 minutes
-NEWS_TTL = 1800     # 30 minutes
 
 DISASTER_KEYWORDS = ["flood", "cyclone", "earthquake", "tsunami", "landslide", "storm", "rain", "drought"]
 
@@ -46,8 +46,9 @@ DISTRICT_COORDS = {
 }
 
 
-# ── NDMA Alerts ──────────────────────────────────────────────────────────────
+# -- NDMA Alerts --------------------------------------------------------------
 
+@with_retry
 def scrape_ndma_alerts() -> list[dict]:
     now = time.time()
     if _alerts_cache["data"] and (now - _alerts_cache["ts"]) < ALERTS_TTL:
@@ -95,15 +96,13 @@ def _scrape_sachet() -> list[dict]:
     url = "https://sachet.ndma.gov.in"
     logger.info("[DisasterScraper] Fetching SACHET: %s", url)
 
-    page = Fetcher.get(url, timeout=15, verify=False)
-    if page.status != 200:
-        logger.warning("[DisasterScraper] SACHET returned HTTP %d", page.status)
+    page = resilient_fetch(url)
+    if not page:
         return results
 
-    # SACHET displays alert cards/list items
-    alert_elements = page.css(".alert-item, .warning-card, .alert-card, .list-group-item, .card")
+    # SACHET displays alert cards/list items — use broad structural selectors
+    alert_elements = page.css("[class*='alert'], [class*='warning'], [class*='card'], .list-group-item")
     if not alert_elements:
-        # Fall back to table rows
         alert_elements = page.css("table tr")
 
     for elem in alert_elements:
@@ -132,18 +131,15 @@ def _scrape_ndma_main() -> list[dict]:
     url = "https://ndma.gov.in"
     logger.info("[DisasterScraper] Fetching NDMA: %s", url)
 
-    page = Fetcher.get(url, timeout=15, verify=False)
-    if page.status != 200:
-        logger.warning("[DisasterScraper] NDMA returned HTTP %d", page.status)
+    page = resilient_fetch(url)
+    if not page:
         return results
 
-    # NDMA homepage has alert tickers, news items, advisories
-    # Look for alert/warning sections
+    # Use broad structural selectors that survive redesigns
     selectors = [
-        ".alert-ticker", ".marquee", ".news-ticker",
-        ".alert-section", ".advisory-section", ".warning-section",
-        ".news-item", ".press-release", ".advisory",
-        "marquee", ".ticker", ".breaking-news",
+        "[class*='alert']", "[class*='ticker']", "[class*='marquee']",
+        "[class*='advisory']", "[class*='warning']", "[class*='news']",
+        "[class*='press']", "marquee",
     ]
 
     for selector in selectors:
@@ -164,23 +160,20 @@ def _scrape_ndma_main() -> list[dict]:
             if alert:
                 results.append(alert)
 
-    # Also check all links for alert-related pages
+    # Check links for alert-related sub-pages
     links = page.css("a")
     for link in links:
-        link_text = link.text.strip().lower()
+        link_text = (link.text or "").strip().lower()
         href = link.attrib.get("href", "")
         if any(kw in link_text for kw in ["alert", "warning", "advisory", "cyclone", "flood"]):
             if "tamil" in link_text or "chennai" in link_text:
-                try:
-                    target = href if href.startswith("http") else f"https://ndma.gov.in{href}"
-                    sub_page = Fetcher.get(target, timeout=10, verify=False)
-                    if sub_page.status == 200:
-                        sub_text = sub_page.get_all_text() or ""
-                        alert = _parse_alert_text(sub_text, "NDMA Advisory")
-                        if alert:
-                            results.append(alert)
-                except Exception:
-                    pass
+                target = href if href.startswith("http") else f"https://ndma.gov.in{href}"
+                sub_page = resilient_fetch(target, timeout=10, max_retries=1)
+                if sub_page:
+                    sub_text = sub_page.get_all_text() or ""
+                    alert = _parse_alert_text(sub_text, "NDMA Advisory")
+                    if alert:
+                        results.append(alert)
 
     return results
 
@@ -190,13 +183,12 @@ def _scrape_tn_sdma() -> list[dict]:
     url = "https://sdma.tn.gov.in"
     logger.info("[DisasterScraper] Fetching TN SDMA: %s", url)
 
-    page = Fetcher.get(url, timeout=15, verify=False)
-    if page.status != 200:
-        logger.warning("[DisasterScraper] TN SDMA returned HTTP %d", page.status)
+    page = resilient_fetch(url)
+    if not page:
         return results
 
-    # Look for alert/warning content
-    all_elements = page.css(".alert, .warning, .notice, .news-item, .ticker-item, marquee, .card-body, .panel-body")
+    # Use broad structural selectors
+    all_elements = page.css("[class*='alert'], [class*='warning'], [class*='notice'], [class*='news'], [class*='ticker'], marquee, [class*='panel-body']")
     if not all_elements:
         all_elements = page.css("p, li, td")
 
@@ -217,112 +209,7 @@ def _scrape_tn_sdma() -> list[dict]:
     return results
 
 
-# ── News Scraper ─────────────────────────────────────────────────────────────
-
-def scrape_disaster_news() -> list[dict]:
-    now = time.time()
-    if _news_cache["data"] and (now - _news_cache["ts"]) < NEWS_TTL:
-        logger.info("[DisasterScraper] Returning cached news (%d items)", len(_news_cache["data"]))
-        return _news_cache["data"]
-
-    news = []
-
-    queries = [
-        "Tamil Nadu disaster",
-        "Tamil Nadu flood",
-        "Tamil Nadu cyclone",
-        "Chennai flood rain",
-    ]
-
-    for query in queries:
-        try:
-            items = _scrape_google_news(query)
-            news.extend(items)
-        except Exception as e:
-            logger.error("[DisasterScraper] News scrape for '%s' failed: %s", query, e)
-
-    # Deduplicate by title similarity
-    seen_titles = set()
-    deduped = []
-    for item in news:
-        title_key = re.sub(r'\W+', '', item["title"].lower())[:40]
-        if title_key not in seen_titles:
-            seen_titles.add(title_key)
-            deduped.append(item)
-
-    # Sort by recency (newest first) and limit
-    deduped.sort(key=lambda x: x.get("publishedAt", ""), reverse=True)
-    deduped = deduped[:20]
-
-    _news_cache["data"] = deduped
-    _news_cache["ts"] = now
-    logger.info("[DisasterScraper] Scraped %d disaster news items", len(deduped))
-    return deduped
-
-
-def _scrape_google_news(query: str) -> list[dict]:
-    results = []
-    encoded = quote_plus(query)
-    url = f"https://news.google.com/search?q={encoded}&hl=en-IN&gl=IN&ceid=IN:en"
-    logger.info("[DisasterScraper] Fetching news for: %s", query)
-
-    page = Fetcher.get(url, timeout=15)
-    if page.status != 200:
-        logger.warning("[DisasterScraper] Google News returned HTTP %d", page.status)
-        return results
-
-    # Google News shows articles in article/card elements
-    articles = page.css("article, .NiLAwe, .xrnccd, c-wiz article")
-    if not articles:
-        articles = page.css("a[href*='/articles/']")
-
-    for article in articles[:10]:
-        title_el = article.css("h3, h4, .JtKRv, .DY5T1d")
-        if not title_el:
-            title_el = [article]
-
-        title = title_el[0].text.strip() if title_el else ""
-        if not title or len(title) < 10:
-            continue
-
-        # Get source
-        source_el = article.css(".wEwyrc, .vr1PYe, time")
-        source = source_el[0].text.strip() if source_el else "News Source"
-
-        # Get time
-        time_el = article.css("time, .WW6dff")
-        published_at = ""
-        if time_el:
-            published_at = time_el[0].attrib.get("datetime", time_el[0].text.strip())
-
-        # Get link
-        link_el = article.css("a")
-        url_val = ""
-        if link_el:
-            href = link_el[0].attrib.get("href", "")
-            if href.startswith("./"):
-                url_val = "https://news.google.com" + href[1:]
-            elif href.startswith("http"):
-                url_val = href
-
-        # Get summary from any description text
-        desc_el = article.css(".GI74Re, .Rai5ob, p")
-        summary = desc_el[0].text.strip() if desc_el else ""
-
-        results.append({
-            "title": title[:200],
-            "summary": summary[:300],
-            "url": url_val,
-            "publishedAt": published_at or datetime.now(timezone.utc).isoformat(),
-            "source": source[:100],
-            "query": query,
-            "scrapedAt": datetime.now(timezone.utc).isoformat(),
-        })
-
-    return results
-
-
-# ── Parsing Helpers ──────────────────────────────────────────────────────────
+# -- Parsing Helpers ----------------------------------------------------------
 
 def _parse_alert_text(text: str, source: str) -> dict | None:
     text = text.strip()
@@ -364,7 +251,7 @@ def _parse_alert_text(text: str, source: str) -> dict | None:
     # Get coordinates for the area
     coords = DISTRICT_COORDS.get(area.lower(), (TN_GEO_CENTER["lat"], TN_GEO_CENTER["lng"]))
 
-    # Title: first sentence or first 100 chars
+    # Title: first sentence or first 120 chars
     title = text.split(".")[0].strip()[:120]
     if len(title) < 15:
         title = text[:120]

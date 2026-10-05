@@ -944,5 +944,170 @@
     "source": "auto-detected",
     "createdAt": "2026-09-29T12:14:46.377Z",
     "read": false
+  },
+  {
+    "id": "alert-1790749124614-mettur-rapid",
+    "type": "flood",
+    "priority": "warning",
+    "title": "RAPID FILLING: Mettur Dam",
+    "message": "Inflow (42639 cusecs) exceeds double the outflow (13293 cusecs). Reservoir rising rapidly. Salem authorities notified.",
+    "area": "Salem",
+    "source": "auto-detected",
+    "createdAt": "2026-09-30T06:18:44.614Z",
+    "read": false
+  },
+  {
+    "id": "alert-1790749124614-bhavanisagar-rapid",
+    "type": "flood",
+    "priority": "warning",
+    "title": "RAPID FILLING: Bhavanisagar Dam",
+    "message": "Inflow (8247 cusecs) exceeds double the outflow (2181 cusecs). Reservoir rising rapidly. Erode authorities notified.",
+    "area": "Erode",
+    "source": "auto-detected",
+    "createdAt": "2026-09-30T06:18:44.614Z",
+    "read": false
+  },
+  {
+    "id": "alert-1790749124614-amaravathi-rapid",
+    "type": "flood",
+    "priority": "warning",
+    "title": "RAPID FILLING: Amaravathi Dam",
+    "message": "Inflow (1525 cusecs) exceeds double the outflow (573 cusecs). Reservoir rising rapidly. Tiruppur authorities notified.",
+    "area": "Tiruppur",
+    "source": "auto-detected",
+    "createdAt": "2026-09-30T06:18:44.614Z",
+    "read": false
+  },
+  {
+    "id": "alert-1790749124614-vaigai-rapid",
+    "type": "flood",
+    "priority": "warning",
+    "title": "RAPID FILLING: Vaigai Dam",
+    "message": "Inflow (2115 cusecs) exceeds double the outflow (855 cusecs). Reservoir rising rapidly. Theni authorities notified.",
+    "area": "Theni",
+    "source": "auto-detected",
+    "createdAt": "2026-09-30T06:18:44.614Z",
+    "read": false
+  },
+  {
+    "id": "alert-1790749124614-pechiparai-rapid",
+    "type": "flood",
+    "priority": "warning",
+    "title": "RAPID FILLING: Pechiparai Dam",
+    "message": "Inflow (295 cusecs) exceeds double the outflow (130 cusecs). Reservoir rising rapidly. Kanyakumari authorities notified.",
+    "area": "Kanyakumari",
+    "source": "auto-detected",
+    "createdAt": "2026-09-30T06:18:44.614Z",
+    "read": false
+  },
+  {
+    "id": "alert-1790749124614-perunchani-rapid",
+    "type": "flood",
+    "priority": "warning",
+    "title": "RAPID FILLING: Perunchani Dam",
+    "message": "Inflow (240 cusecs) exceeds double the outflow (98 cusecs). Reservoir rising rapidly. Kanyakumari authorities notified.",
+    "area": "Kanyakumari",
+    "source": "auto-detected",
+    "createdAt": "2026-09-30T06:18:44.614Z",
+    "read": false
+  },
+  {
+    "id": "alert-1790749124614-sathanur-rapid",
+    "type": "flood",
+    "priority": "warning",
+    "title": "RAPID FILLING: Sathanur Dam",
+    "message": "Inflow (4912 cusecs) exceeds double the outflow (735 cusecs). Reservoir rising rapidly. Tiruvannamalai authorities notified.",
+    "area": "Tiruvannamalai",
+    "source": "auto-detected",
+    "createdAt": "2026-09-30T06:18:44.614Z",
+    "read": false
+  },
+  {
+    "id": "alert-1790749124614-hemavathy-warn",
+    "type": "flood",
+    "priority": "warning",
+    "title": "FLOOD ALERT: Hemavathy Dam at 87.3% capacity",
+    "message": "Dam water level is approaching danger threshold. Current inflow: 6570 cusecs. Monitor closely for further rises in Hassan, Karnataka.",
+    "area": "Hassan, Karnataka",
+    "source": "auto-detected",
+    "createdAt": "2026-09-30T06:18:44.614Z",
+    "read": false
+  },
+  {
+    "id": "alert-1791053376858-mettur-rapid",
+    "type": "flood",
+    "priority": "warning",
+    "title": "RAPID FILLING: Mettur Dam",
+    "message": "Inflow (42639 cusecs) exceeds double the outflow (13497 cusecs). Reservoir rising rapidly. Salem authorities notified.",
+    "area": "Salem",
+    "source": "auto-detected",
+    "createdAt": "2026-10-03T18:49:36.857Z",
+    "read": false
+  },
+  {
+    "id": "alert-1791053376858-bhavanisagar-rapid",
+    "type": "flood",
+    "priority": "warning",
+    "title": "RAPID FILLING: Bhavanisagar Dam",
+    "message": "Inflow (8247 cusecs) exceeds double the outflow (2220 cusecs). Reservoir rising rapidly. Erode authorities notified.",
+    "area": "Erode",
+    "source": "auto-detected",
+    "createdAt": "2026-10-03T18:49:36.858Z",
+    "read": false
+  },
+  {
+    "id": "alert-1791053376858-amaravathi-rapid",
+    "type": "flood",
+    "priority": "warning",
+    "title": "RAPID FILLING: Amaravathi Dam",
+    "message": "Inflow (1525 cusecs) exceeds double the outflow (572 cusecs). Reservoir rising rapidly. Tiruppur authorities notified.",
+    "area": "Tiruppur",
+    "source": "auto-detected",
+    "createdAt": "2026-10-03T18:49:36.858Z",
+    "read": false
+  },
+  {
+    "id": "alert-1791053376859-vaigai-rapid",
+    "type": "flood",
+    "priority": "warning",
+    "title": "RAPID FILLING: Vaigai Dam",
+    "message": "Inflow (2115 cusecs) exceeds double the outflow (871 cusecs). Reservoir rising rapidly. Theni authorities notified.",
+    "area": "Theni",
+    "source": "auto-detected",
+    "createdAt": "2026-10-03T18:49:36.858Z",
+    "read": false
+  },
+  {
+    "id": "alert-1791053376860-pechiparai-rapid",
+    "type": "flood",
+    "priority": "warning",
+    "title": "RAPID FILLING: Pechiparai Dam",
+    "message": "Inflow (391 cusecs) exceeds double the outflow (133 cusecs). Reservoir rising rapidly. Kanyakumari authorities notified.",
+    "area": "Kanyakumari",
+    "source": "auto-detected",
+    "createdAt": "2026-10-03T18:49:36.860Z",
+    "read": false
+  },
+  {
+    "id": "alert-1791053376860-perunchani-rapid",
+    "type": "flood",
+    "priority": "warning",
+    "title": "RAPID FILLING: Perunchani Dam",
+    "message": "Inflow (456 cusecs) exceeds double the outflow (101 cusecs). Reservoir rising rapidly. Kanyakumari authorities notified.",
+    "area": "Kanyakumari",
+    "source": "auto-detected",
+    "createdAt": "2026-10-03T18:49:36.860Z",
+    "read": false
+  },
+  {
+    "id": "alert-1791053376860-sathanur-rapid",
+    "type": "flood",
+    "priority": "warning",
+    "title": "RAPID FILLING: Sathanur Dam",
+    "message": "Inflow (4912 cusecs) exceeds double the outflow (756 cusecs). Reservoir rising rapidly. Tiruvannamalai authorities notified.",
+    "area": "Tiruvannamalai",
+    "source": "auto-detected",
+    "createdAt": "2026-10-03T18:49:36.860Z",
+    "read": false
   }
 ]

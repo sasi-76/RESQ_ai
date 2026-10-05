@@ -13,7 +13,14 @@ async function fetchScraper(endpoint) {
     });
     clearTimeout(timeout);
 
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      // Handle rate limiting from scraper service
+      if (res.status === 429) {
+        console.warn(`[ScraperBridge] Rate limited on ${endpoint}, backing off`);
+        return null;
+      }
+      throw new Error(`HTTP ${res.status}`);
+    }
     const json = await res.json();
     if (!json.success) throw new Error(json.error || 'Scraper returned failure');
     return json.data;
@@ -29,6 +36,7 @@ async function fetchScraper(endpoint) {
 }
 
 // Enrich dam database with scraped metadata (bulletin refs, registry info, verified dams)
+// Only writes to DB when real data is received — never overwrites with empty/null
 async function enrichDamsWithScrapedData() {
   const scraped = await fetchScraper('/api/scrape/dams');
   if (!scraped || typeof scraped !== 'object') {
@@ -74,6 +82,7 @@ async function enrichDamsWithScrapedData() {
 }
 
 // Fetch weather warnings from IMD and inject as alerts
+// Only creates alerts from real scraped warnings — skips if scraper returns empty
 async function ingestWeatherWarnings() {
   const warnings = await fetchScraper('/api/scrape/weather-warnings');
   if (!warnings || !Array.isArray(warnings) || warnings.length === 0) return [];
@@ -83,6 +92,9 @@ async function ingestWeatherWarnings() {
   let newAlerts = 0;
 
   for (const warning of warnings) {
+    // Validate required fields — only ingest real data
+    if (!warning.district || !warning.type || !warning.message) continue;
+
     const alertId = `imd-${warning.type}-${warning.district}-${Date.now()}`;
     const isDuplicate = alerts.some(a =>
       a.source === 'IMD-scraper' &&
@@ -95,8 +107,8 @@ async function ingestWeatherWarnings() {
       alerts.push({
         id: alertId,
         type: warning.type || 'weather',
-        priority: warning.severity === 'red' ? 'critical' :
-                  warning.severity === 'orange' ? 'warning' : 'info',
+        priority: warning.severity === 'critical' ? 'critical' :
+                  warning.severity === 'high' ? 'warning' : 'info',
         title: `IMD ${(warning.severity || 'advisory').toUpperCase()}: ${warning.district}`,
         message: warning.message || `${warning.type} warning for ${warning.district}`,
         area: warning.district,
@@ -129,6 +141,7 @@ async function fetchRealRiverLevels() {
 }
 
 // Fetch NDMA disaster alerts and inject as system disasters
+// Only creates disasters from real scraped alerts — validates all required fields
 async function ingestNDMAAlerts() {
   const ndmaAlerts = await fetchScraper('/api/scrape/ndma-alerts');
   if (!ndmaAlerts || !Array.isArray(ndmaAlerts) || ndmaAlerts.length === 0) return [];
@@ -139,6 +152,10 @@ async function ingestNDMAAlerts() {
   let newDisasters = 0;
 
   for (const ndma of ndmaAlerts) {
+    // Validate required fields — only real data gets ingested
+    if (!ndma.title || !ndma.area || !ndma.severity) continue;
+    if (ndma.severity === 'low' || ndma.severity === 'info') continue;
+
     const isDuplicate = disasters.some(d =>
       d.source === 'NDMA-scraper' &&
       d.areaName === ndma.area &&
@@ -146,15 +163,18 @@ async function ingestNDMAAlerts() {
       new Date(d.createdAt).getTime() > Date.now() - 12 * 3600 * 1000
     );
 
-    if (!isDuplicate && ndma.severity && ndma.severity !== 'info') {
+    if (!isDuplicate) {
+      // Only accept entries with real coordinates (not default fallback)
+      const hasRealCoords = ndma.lat && ndma.lng && ndma.lat !== 11.13 && ndma.lng !== 78.66;
+
       const disasterId = `ndma-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       disasters.push({
         id: disasterId,
         type: ndma.type || 'flood',
-        severity: ndma.severity === 'red' ? 'critical' : 'warning',
+        severity: ndma.severity === 'critical' ? 'critical' : 'warning',
         areaName: ndma.area || ndma.title,
-        lat: ndma.lat || 11.75,
-        lng: ndma.lng || 79.77,
+        lat: hasRealCoords ? ndma.lat : undefined,
+        lng: hasRealCoords ? ndma.lng : undefined,
         source: 'NDMA-scraper',
         trigger: ndma.title,
         description: ndma.description,
@@ -166,7 +186,7 @@ async function ingestNDMAAlerts() {
       alerts.push({
         id: `alert-${disasterId}`,
         type: ndma.type || 'weather',
-        priority: ndma.severity === 'red' ? 'critical' : 'warning',
+        priority: ndma.severity === 'critical' ? 'critical' : 'warning',
         title: `NDMA: ${ndma.title}`,
         message: ndma.description,
         area: ndma.area,
@@ -188,7 +208,8 @@ async function ingestNDMAAlerts() {
   return ndmaAlerts;
 }
 
-// Enrich hospital database with scraped data
+// Enrich hospital database with real scraped data only
+// Only updates fields that have real values — never overwrites with null/0
 async function enrichHospitals() {
   const scraped = await fetchScraper('/api/scrape/hospitals');
   if (!scraped || !Array.isArray(scraped) || scraped.length === 0) return null;
@@ -204,13 +225,15 @@ async function enrichHospitals() {
     );
 
     if (match) {
-      if (scrapedHosp.beds != null) match.beds = scrapedHosp.beds;
+      // Only update with real non-null values
+      if (scrapedHosp.beds != null && scrapedHosp.beds > 0) match.beds = scrapedHosp.beds;
       if (scrapedHosp.availableBeds != null) match.availableBeds = scrapedHosp.availableBeds;
-      if (scrapedHosp.phone && scrapedHosp.phone !== match.phone) match.phone = scrapedHosp.phone;
+      if (scrapedHosp.phone && scrapedHosp.phone.length > 5) match.phone = scrapedHosp.phone;
       match.scrapedSource = scrapedHosp.source || 'web-scraper';
       match.lastScrapedAt = new Date().toISOString();
       updated++;
     } else if (scrapedHosp.lat && scrapedHosp.lng && scrapedHosp.name) {
+      // Only add hospitals with real coordinates
       hospitals.push({
         id: 2000 + hospitals.length,
         name: scrapedHosp.name,
@@ -225,7 +248,7 @@ async function enrichHospitals() {
         status: 'operational',
         phone: scrapedHosp.phone || '',
         beds: scrapedHosp.beds || 0,
-        availableBeds: scrapedHosp.availableBeds || 0,
+        availableBeds: scrapedHosp.availableBeds,
         scrapedSource: scrapedHosp.source || 'web-scraper',
         lastScrapedAt: new Date().toISOString(),
       });
@@ -253,7 +276,7 @@ async function fetchBloodBanks() {
 
 // Run all scrapers and return combined results
 async function runFullScrapeSync() {
-  console.log('[ScraperBridge] Running full scrape cycle...');
+  console.log('[ScraperBridge] Running full scrape cycle (real data only)...');
   const startTime = Date.now();
 
   const results = await Promise.allSettled([
@@ -268,8 +291,9 @@ async function runFullScrapeSync() {
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
   const successes = results.filter(r => r.status === 'fulfilled' && r.value).length;
+  const failures = results.filter(r => r.status === 'rejected').length;
 
-  console.log(`[ScraperBridge] Full scrape complete in ${elapsed}s (${successes}/${results.length} sources)`);
+  console.log(`[ScraperBridge] Full scrape complete in ${elapsed}s (${successes}/${results.length} sources, ${failures} failures)`);
 
   return {
     dams: results[0].status === 'fulfilled' ? results[0].value : null,

@@ -18,6 +18,8 @@ const missionRoutes = require('./routes/missions');
 const taskRoutes = require('./routes/tasks');
 const predictionRoutes = require('./routes/predictions');
 const scraperRoutes = require('./routes/scraper');
+const riskScoreRoutes = require('./routes/riskScore');
+const landReportRoutes = require('./routes/landReport');
 const { runFullScrapeSync, isScraperAvailable, startAutoScraping } = require('./services/scraperBridge');
 
 const app = express();
@@ -64,6 +66,8 @@ app.use('/api/missions', missionRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/predictions', predictionRoutes);
 app.use('/api/scraper', scraperRoutes);
+app.use('/api/risk-score', riskScoreRoutes);
+app.use('/api/land-report', landReportRoutes);
 
 app.post('/api/dams-refresh', async (req, res) => {
   try {

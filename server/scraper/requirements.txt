@@ -1,3 +1,4 @@
 scrapling[all]
 flask
 flask-cors
+certifi

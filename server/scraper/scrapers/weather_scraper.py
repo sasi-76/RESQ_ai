@@ -8,11 +8,11 @@ import re
 import logging
 from datetime import datetime, timezone
 
-from scrapling import Fetcher
+from scrapers.fetch_utils import resilient_fetch, with_retry
 
 logger = logging.getLogger(__name__)
 
-# ── Cache ────────────────────────────────────────────────────────────────────
+# -- Cache --------------------------------------------------------------------
 
 _warnings_cache = {"data": [], "ts": 0}
 _cyclone_cache = {"data": [], "ts": 0}
@@ -37,8 +37,9 @@ SEVERITY_MAP = {
     "green": "low",
 }
 
-# ── Weather Warnings ─────────────────────────────────────────────────────────
+# -- Weather Warnings ---------------------------------------------------------
 
+@with_retry
 def scrape_weather_warnings() -> list[dict]:
     now = time.time()
     if _warnings_cache["data"] and (now - _warnings_cache["ts"]) < WARNINGS_TTL:
@@ -70,9 +71,8 @@ def _scrape_imd_warnings() -> list[dict]:
     url = "https://mausam.imd.gov.in/responsive/wardisplay.php"
     logger.info("[WeatherScraper] Fetching IMD warnings: %s", url)
 
-    page = Fetcher.get(url, timeout=15, verify=False)
-    if page.status != 200:
-        logger.warning("[WeatherScraper] IMD warnings returned HTTP %d", page.status)
+    page = resilient_fetch(url)
+    if not page:
         return results
 
     # IMD warning page has tables with color-coded warning rows
@@ -132,9 +132,8 @@ def _scrape_imd_rainfall() -> list[dict]:
     url = "https://mausam.imd.gov.in/responsive/rainfallinformation.php"
     logger.info("[WeatherScraper] Fetching IMD rainfall: %s", url)
 
-    page = Fetcher.get(url, timeout=15, verify=False)
-    if page.status != 200:
-        logger.warning("[WeatherScraper] IMD rainfall returned HTTP %d", page.status)
+    page = resilient_fetch(url)
+    if not page:
         return results
 
     rows = page.css("table tr")
@@ -177,8 +176,9 @@ def _scrape_imd_rainfall() -> list[dict]:
     return results
 
 
-# ── Cyclone Bulletins ────────────────────────────────────────────────────────
+# -- Cyclone Bulletins --------------------------------------------------------
 
+@with_retry
 def scrape_cyclone_bulletins() -> list[dict]:
     now = time.time()
     if _cyclone_cache["data"] and (now - _cyclone_cache["ts"]) < CYCLONE_TTL:
@@ -203,9 +203,8 @@ def _scrape_imd_cyclones() -> list[dict]:
     url = "https://mausam.imd.gov.in/responsive/cycloneinformation.php"
     logger.info("[WeatherScraper] Fetching IMD cyclone info: %s", url)
 
-    page = Fetcher.get(url, timeout=15, verify=False)
-    if page.status != 200:
-        logger.warning("[WeatherScraper] IMD cyclone returned HTTP %d", page.status)
+    page = resilient_fetch(url)
+    if not page:
         return results
 
     html = page.html_content.lower()
@@ -217,8 +216,8 @@ def _scrape_imd_cyclones() -> list[dict]:
         return results
 
     # Parse cyclone bulletins - IMD uses structured text/table blocks
-    # Look for bulletin content divs
-    content_blocks = page.css(".cyclone-content, .bulletin-content, .content-area, #content, .main-content")
+    # Use broad structural selectors that are stable across redesigns
+    content_blocks = page.css("div[class*='content'], div[class*='bulletin'], #content, .main-content, main")
     if not content_blocks:
         content_blocks = page.css("table")
 
@@ -285,11 +284,15 @@ def _parse_cyclone_text(text: str) -> dict | None:
     forecast_match = re.search(r"(?:forecast|expected|likely)\s*:?\s*(.{30,200}?)[\.\n]", text_lower)
     forecast = forecast_match.group(1).strip() if forecast_match else ""
 
+    # Only return if we have at least coordinates or wind data — real signal
+    if lat is None and lng is None and wind_speed is None:
+        return None
+
     return {
         "name": name,
         "category": category,
-        "lat": lat or 12.0,
-        "lng": lng or 82.0,
+        "lat": lat,
+        "lng": lng,
         "windSpeed": wind_speed,
         "movement": movement[:200],
         "forecast": forecast[:300],
@@ -298,7 +301,7 @@ def _parse_cyclone_text(text: str) -> dict | None:
     }
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
+# -- Helpers ------------------------------------------------------------------
 
 def _classify_warning(text: str) -> str:
     text = text.lower()

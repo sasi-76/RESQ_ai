@@ -12,6 +12,7 @@ import Predictions from './pages/Predictions';
 import FieldTasks from './pages/FieldTasks';
 import IncidentReports from './pages/IncidentReports';
 import Dams from './pages/Dams';
+import Pricing from './pages/Pricing';
 import ResQCopilot from './components/AICopilot/ResQCopilot';
 import CriticalDisasterAlert from './components/CriticalDisasterAlert';
 
@@ -33,6 +34,7 @@ function App() {
             <Route path="/dams" element={<Dams />} />
             <Route path="/predictions" element={<Predictions />} />
             <Route path="/reports" element={<IncidentReports />} />
+            <Route path="/pricing" element={<Pricing />} />
             <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/demo" element={<DemoControls />} />
           </Routes>

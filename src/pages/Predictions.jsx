@@ -20,8 +20,10 @@ import {
   CheckCircle2,
   Info,
   X,
+  History,
+  AlertCircle,
 } from 'lucide-react';
-import { fetchPredictions, refreshPredictions, fetchPredictionSummary } from '../services/api';
+import { fetchPredictions, refreshPredictions, fetchPredictionSummary, fetchPredictionHistory } from '../services/api';
 
 // ── Config ───────────────────────────────────────────────────────────────────
 
@@ -120,6 +122,15 @@ function formatDate(isoString) {
   });
 }
 
+function formatAge(ms) {
+  if (ms == null) return 'Unknown';
+  const mins = Math.round(ms / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  return `${hours}h ${mins % 60}m ago`;
+}
+
 // ── Components ───────────────────────────────────────────────────────────────
 
 function StatCard({ icon: Icon, label, value, subtext, gradient }) {
@@ -136,6 +147,32 @@ function StatCard({ icon: Icon, label, value, subtext, gradient }) {
           <Icon className="h-5 w-5 text-white/80" />
         </div>
       </div>
+    </div>
+  );
+}
+
+function StalenessIndicator({ meta }) {
+  if (!meta || meta.dataAgeMs == null) return null;
+
+  const isStale = meta.isStale;
+  const age = formatAge(meta.dataAgeMs);
+
+  return (
+    <div
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
+        isStale
+          ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+          : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+      }`}
+      title={meta.lastCycleAt ? `Last prediction cycle: ${formatDate(meta.lastCycleAt)}` : ''}
+    >
+      {isStale ? (
+        <AlertCircle className="h-3 w-3" />
+      ) : (
+        <CheckCircle2 className="h-3 w-3" />
+      )}
+      Data: {age}
+      {isStale && ' (stale)'}
     </div>
   );
 }
@@ -284,7 +321,9 @@ function PredictionCard({ prediction, isExpanded, onToggle }) {
 
 export default function Predictions() {
   const [predictions, setPredictions] = useState([]);
+  const [meta, setMeta] = useState(null);
   const [summary, setSummary] = useState(null);
+  const [calibration, setCalibration] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [typeFilter, setTypeFilter] = useState('all');
@@ -294,12 +333,17 @@ export default function Predictions() {
 
   const loadData = useCallback(async () => {
     try {
-      const [preds, summ] = await Promise.all([
+      const [predResult, summ, historyData] = await Promise.all([
         fetchPredictions(),
         fetchPredictionSummary(),
+        fetchPredictionHistory(50),
       ]);
-      setPredictions(preds || []);
+      setPredictions(predResult?.predictions || []);
+      setMeta(predResult?.meta || null);
       setSummary(summ || null);
+      if (historyData?.calibration) {
+        setCalibration(historyData.calibration);
+      }
       setError(null);
     } catch (err) {
       setError('Failed to load predictions. Is the backend running?');
@@ -367,14 +411,17 @@ export default function Predictions() {
             AI-powered risk forecasting based on real-time trends, weather forecasts, and seismic analysis
           </p>
         </div>
-        <button
-          onClick={handleRefresh}
-          disabled={refreshing}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium transition-all disabled:opacity-50"
-        >
-          <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-          {refreshing ? 'Analyzing...' : 'Refresh Forecast'}
-        </button>
+        <div className="flex items-center gap-3">
+          <StalenessIndicator meta={meta} />
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium transition-all disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            {refreshing ? 'Analyzing...' : 'Refresh Forecast'}
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -411,10 +458,10 @@ export default function Predictions() {
           gradient="from-amber-500 to-orange-600"
         />
         <StatCard
-          icon={BarChart3}
-          label="Risk Types"
-          value={Object.keys(typeBreakdown).length}
-          subtext={Object.entries(typeBreakdown).map(([t, c]) => `${typeConfig[t]?.label || t}: ${c}`).join(', ')}
+          icon={History}
+          label="Model Accuracy"
+          value={calibration?.accuracy != null ? `${calibration.accuracy}%` : '—'}
+          subtext={calibration?.note || 'Collecting calibration data'}
           gradient="from-purple-500 to-violet-600"
         />
       </div>
@@ -558,10 +605,10 @@ export default function Predictions() {
         <Info className="h-4 w-4 text-slate-500 mt-0.5 flex-shrink-0" />
         <div className="text-xs text-slate-500 space-y-1">
           <p>
-            <strong className="text-slate-400">How predictions work:</strong> The engine analyzes dam inflow/outflow trends to project when reservoirs reach critical levels, fetches 7-day weather forecasts for rainfall and wind patterns, monitors USGS earthquake data for seismic clustering, and evaluates compound risks when multiple hazards converge.
+            <strong className="text-slate-400">How predictions work:</strong> The engine analyzes dam inflow/outflow trends to project when reservoirs reach critical levels, fetches 7-day weather forecasts for rainfall and wind patterns, monitors USGS earthquake data for seismic clustering, and evaluates compound risks when multiple hazards converge. Storage reservoirs with zero outflow (Poondi, Red Hills, Chembarambakkam) are treated separately from release dams.
           </p>
           <p>
-            Predictions refresh automatically every 10 minutes. Probability indicates likelihood within the forecast window. Confidence reflects how reliable the prediction model is for the given timeframe.
+            Predictions refresh automatically every 10 minutes. Expired predictions are archived and compared against actual outcomes for model calibration. The staleness indicator shows how fresh the current data is.
           </p>
         </div>
       </div>

@@ -16,6 +16,8 @@ import logging
 import re
 from datetime import datetime, timezone
 
+from scrapers.fetch_utils import resilient_fetch, with_retry
+
 logger = logging.getLogger(__name__)
 
 _dam_cache = {"data": {}, "timestamp": 0}
@@ -40,77 +42,65 @@ DAM_REGISTRY = {
 
 def _scrape_cwc_bulletin_reference():
     """Get latest CWC reservoir storage bulletin URL and date."""
-    from scrapling import Fetcher
-    try:
-        resp = Fetcher.get(
-            "https://cwc.gov.in/en/reservoir-level-storage-bulletin",
-            timeout=15, verify=False,
-        )
-        if resp.status != 200:
-            return None
+    resp = resilient_fetch("https://cwc.gov.in/en/reservoir-level-storage-bulletin")
+    if not resp:
+        return None
 
-        latest_pdf = None
-        latest_date = None
-        for link in resp.css("a"):
-            href = link.attrib.get("href", "")
-            if "bulletin" in href.lower() and href.endswith(".pdf"):
-                date_match = re.search(r"(\d{2})-(\d{2})-(\d{4})", href)
-                if date_match:
-                    try:
-                        d = datetime(
-                            int(date_match.group(3)),
-                            int(date_match.group(2)),
-                            int(date_match.group(1)),
-                        )
-                        if latest_date is None or d > latest_date:
-                            latest_date = d
-                            latest_pdf = href if href.startswith("http") else f"https://cwc.gov.in{href}"
-                    except ValueError:
-                        pass
+    latest_pdf = None
+    latest_date = None
+    for link in resp.css("a"):
+        href = link.attrib.get("href", "")
+        if "bulletin" in href.lower() and href.endswith(".pdf"):
+            date_match = re.search(r"(\d{2})-(\d{2})-(\d{4})", href)
+            if date_match:
+                try:
+                    d = datetime(
+                        int(date_match.group(3)),
+                        int(date_match.group(2)),
+                        int(date_match.group(1)),
+                    )
+                    if latest_date is None or d > latest_date:
+                        latest_date = d
+                        latest_pdf = href if href.startswith("http") else f"https://cwc.gov.in{href}"
+                except ValueError:
+                    pass
 
-        if latest_pdf:
-            logger.info("[DamScraper] CWC latest bulletin: %s (%s)",
-                        latest_pdf,
-                        latest_date.strftime("%Y-%m-%d") if latest_date else "unknown")
-            return {
-                "url": latest_pdf,
-                "date": latest_date.isoformat() if latest_date else None,
-                "source": "CWC Reservoir Storage Bulletin",
-            }
-    except Exception as e:
-        logger.warning("[DamScraper] CWC bulletin fetch failed: %s", e)
+    if latest_pdf:
+        logger.info("[DamScraper] CWC latest bulletin: %s (%s)",
+                    latest_pdf,
+                    latest_date.strftime("%Y-%m-%d") if latest_date else "unknown")
+        return {
+            "url": latest_pdf,
+            "date": latest_date.isoformat() if latest_date else None,
+            "source": "CWC Reservoir Storage Bulletin",
+        }
+
     return None
 
 
 def _scrape_tn_wrd_dam_list():
     """Scrape TN WRD for structural dam information (names, types, districts)."""
-    from scrapling import Fetcher
     dams_found = []
-    try:
-        resp = Fetcher.get(
-            "https://wrd.tn.gov.in/water-bodies-structure/dams/",
-            timeout=15, verify=False,
-        )
-        if resp.status != 200:
-            return dams_found
+    resp = resilient_fetch("https://wrd.tn.gov.in/water-bodies-structure/dams/")
+    if not resp:
+        return dams_found
 
-        text = resp.get_all_text()
-        for dam_id, info in DAM_REGISTRY.items():
-            for alias in info["aliases"]:
-                if alias.lower() in text.lower():
-                    dams_found.append({
-                        "id": dam_id,
-                        "name": info["name"],
-                        "verifiedOnWRD": True,
-                    })
-                    break
+    text = resp.get_all_text()
+    for dam_id, info in DAM_REGISTRY.items():
+        for alias in info["aliases"]:
+            if alias.lower() in text.lower():
+                dams_found.append({
+                    "id": dam_id,
+                    "name": info["name"],
+                    "verifiedOnWRD": True,
+                })
+                break
 
-        logger.info("[DamScraper] TN WRD: verified %d dams exist on site", len(dams_found))
-    except Exception as e:
-        logger.warning("[DamScraper] TN WRD scrape failed: %s", e)
+    logger.info("[DamScraper] TN WRD: verified %d dams exist on site", len(dams_found))
     return dams_found
 
 
+@with_retry
 def scrape_dam_levels():
     """
     Scrape dam-related data from government sources.

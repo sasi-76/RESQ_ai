@@ -3,13 +3,15 @@ import sys
 import time
 import logging
 import asyncio
+import threading
 from datetime import datetime
+from collections import defaultdict
 
 from flask import Flask, jsonify, request
-from flask_cors import CORS
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from flask_cors import CORS
 from scrapers.hospital_scraper import scrape_hospital_data, scrape_blood_bank_availability
 from scrapers.news_scraper import scrape_disaster_news
 
@@ -26,6 +28,42 @@ CORS(app, origins=[
     "http://localhost:3000",
     "http://localhost:5000",
 ])
+
+
+# -- Rate Limiter (per-endpoint, in-memory) -----------------------------------
+
+class RateLimiter:
+    """
+    Simple sliding-window rate limiter.
+    Prevents repeated requests from hammering government sites after cache expires.
+    """
+
+    def __init__(self, max_requests: int = 5, window_seconds: int = 60):
+        self.max_requests = max_requests
+        self.window = window_seconds
+        self._hits = defaultdict(list)  # key -> [timestamps]
+        self._lock = threading.Lock()
+
+    def is_allowed(self, key: str) -> bool:
+        now = time.time()
+        with self._lock:
+            # Prune old entries
+            self._hits[key] = [t for t in self._hits[key] if now - t < self.window]
+            if len(self._hits[key]) >= self.max_requests:
+                return False
+            self._hits[key].append(now)
+            return True
+
+    def remaining(self, key: str) -> int:
+        now = time.time()
+        with self._lock:
+            self._hits[key] = [t for t in self._hits[key] if now - t < self.window]
+            return max(0, self.max_requests - len(self._hits[key]))
+
+
+# 5 requests per 60 seconds per endpoint — generous for legitimate use,
+# prevents runaway loops from hammering gov sites
+_limiter = RateLimiter(max_requests=5, window_seconds=60)
 
 
 def _safe_import(module_path, func_name):
@@ -52,6 +90,18 @@ def _run_sync(func, *args, **kwargs):
         raise
 
 
+def _check_rate_limit(endpoint: str):
+    """Returns a 429 response if rate limit exceeded, else None."""
+    if not _limiter.is_allowed(endpoint):
+        remaining = _limiter.remaining(endpoint)
+        return jsonify({
+            "success": False,
+            "error": "Rate limit exceeded. Try again shortly.",
+            "remaining": remaining,
+        }), 429
+    return None
+
+
 @app.before_request
 def log_request():
     logger.info(f"{request.method} {request.path}")
@@ -64,7 +114,7 @@ def health():
         "data": {
             "status": "running",
             "name": "RESQAI Scraper Service",
-            "version": "1.0.0",
+            "version": "2.0.0",
             "timestamp": datetime.utcnow().isoformat() + "Z",
             "uptime": time.time() - _start_time,
             "scrapers": {
@@ -81,6 +131,9 @@ def health():
 
 @app.route("/api/scrape/dams", methods=["GET"])
 def get_dams():
+    limited = _check_rate_limit("dams")
+    if limited:
+        return limited
     try:
         fn = _safe_import("scrapers.dam_scraper", "scrape_dam_levels")
         if not fn:
@@ -94,6 +147,9 @@ def get_dams():
 
 @app.route("/api/scrape/weather-warnings", methods=["GET"])
 def get_weather_warnings():
+    limited = _check_rate_limit("weather-warnings")
+    if limited:
+        return limited
     try:
         fn = _safe_import("scrapers.weather_scraper", "scrape_weather_warnings")
         if not fn:
@@ -107,6 +163,9 @@ def get_weather_warnings():
 
 @app.route("/api/scrape/cyclone-bulletins", methods=["GET"])
 def get_cyclone_bulletins():
+    limited = _check_rate_limit("cyclone-bulletins")
+    if limited:
+        return limited
     try:
         fn = _safe_import("scrapers.weather_scraper", "scrape_cyclone_bulletins")
         if not fn:
@@ -120,6 +179,9 @@ def get_cyclone_bulletins():
 
 @app.route("/api/scrape/river-levels", methods=["GET"])
 def get_river_levels():
+    limited = _check_rate_limit("river-levels")
+    if limited:
+        return limited
     try:
         fn = _safe_import("scrapers.river_scraper", "scrape_river_levels")
         if not fn:
@@ -133,6 +195,9 @@ def get_river_levels():
 
 @app.route("/api/scrape/ndma-alerts", methods=["GET"])
 def get_ndma_alerts():
+    limited = _check_rate_limit("ndma-alerts")
+    if limited:
+        return limited
     try:
         fn = _safe_import("scrapers.disaster_scraper", "scrape_ndma_alerts")
         if not fn:
@@ -146,6 +211,9 @@ def get_ndma_alerts():
 
 @app.route("/api/scrape/disaster-news", methods=["GET"])
 def get_disaster_news():
+    limited = _check_rate_limit("disaster-news")
+    if limited:
+        return limited
     try:
         query = request.args.get("q", "Tamil Nadu disaster")
         data = _run_sync(scrape_disaster_news, query)
@@ -157,6 +225,9 @@ def get_disaster_news():
 
 @app.route("/api/scrape/hospitals", methods=["GET"])
 def get_hospitals():
+    limited = _check_rate_limit("hospitals")
+    if limited:
+        return limited
     try:
         data = _run_sync(scrape_hospital_data)
         return jsonify({"success": True, "data": data, "count": len(data), "timestamp": datetime.utcnow().isoformat() + "Z"})
@@ -167,6 +238,9 @@ def get_hospitals():
 
 @app.route("/api/scrape/blood-banks", methods=["GET"])
 def get_blood_banks():
+    limited = _check_rate_limit("blood-banks")
+    if limited:
+        return limited
     try:
         data = _run_sync(scrape_blood_bank_availability)
         return jsonify({"success": True, "data": data, "count": len(data), "timestamp": datetime.utcnow().isoformat() + "Z"})
@@ -177,6 +251,10 @@ def get_blood_banks():
 
 @app.route("/api/scrape/all", methods=["GET"])
 def get_all():
+    limited = _check_rate_limit("all")
+    if limited:
+        return limited
+
     results = {}
 
     scrapers = {
@@ -234,10 +312,11 @@ _start_time = time.time()
 if __name__ == "__main__":
     port = int(os.environ.get("SCRAPER_PORT", 5001))
     logger.info(f"")
-    logger.info(f"  RESQAI Scraper Service (Scrapling)")
-    logger.info(f"  ────────────────────────────────────")
-    logger.info(f"  Port:    {port}")
-    logger.info(f"  Health:  http://localhost:{port}/api/scrape/health")
-    logger.info(f"  All:     http://localhost:{port}/api/scrape/all")
+    logger.info(f"  RESQAI Scraper Service v2.0 (Real Data Only)")
+    logger.info(f"  ──────────────────────────────────────────────")
+    logger.info(f"  Port:       {port}")
+    logger.info(f"  Health:     http://localhost:{port}/api/scrape/health")
+    logger.info(f"  All:        http://localhost:{port}/api/scrape/all")
+    logger.info(f"  Rate Limit: 5 req/min per endpoint")
     logger.info(f"")
     app.run(host="0.0.0.0", port=port, debug=False)

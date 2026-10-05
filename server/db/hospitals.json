@@ -93,9 +93,9 @@
     "status": "operational",
     "phone": "+91 44 2530 5000",
     "beds": 2800,
-    "availableBeds": 818,
+    "availableBeds": 824,
     "scrapedSource": "verified-registry",
-    "lastScrapedAt": "2026-09-29T08:54:25.796Z"
+    "lastScrapedAt": "2026-09-30T07:48:56.889Z"
   },
   {
     "id": 2006,
@@ -111,9 +111,9 @@
     "status": "operational",
     "phone": "+91 44 2528 1351",
     "beds": 1600,
-    "availableBeds": 340,
+    "availableBeds": 165,
     "scrapedSource": "verified-registry",
-    "lastScrapedAt": "2026-09-29T08:54:25.796Z"
+    "lastScrapedAt": "2026-09-30T07:48:56.889Z"
   },
   {
     "id": 2007,
@@ -129,9 +129,9 @@
     "status": "operational",
     "phone": "+91 44 2836 1413",
     "beds": 1200,
-    "availableBeds": 212,
+    "availableBeds": 202,
     "scrapedSource": "verified-registry",
-    "lastScrapedAt": "2026-09-29T08:54:25.796Z"
+    "lastScrapedAt": "2026-09-30T07:48:56.889Z"
   },
   {
     "id": 2008,
@@ -147,9 +147,9 @@
     "status": "operational",
     "phone": "+91 44 2536 1111",
     "beds": 500,
-    "availableBeds": 122,
+    "availableBeds": 126,
     "scrapedSource": "verified-registry",
-    "lastScrapedAt": "2026-09-29T08:54:25.796Z"
+    "lastScrapedAt": "2026-09-30T07:48:56.889Z"
   },
   {
     "id": 2009,
@@ -165,9 +165,9 @@
     "status": "operational",
     "phone": "+91 44 2530 1230",
     "beds": 800,
-    "availableBeds": 241,
+    "availableBeds": 209,
     "scrapedSource": "verified-registry",
-    "lastScrapedAt": "2026-09-29T08:54:25.796Z"
+    "lastScrapedAt": "2026-09-30T07:48:56.889Z"
   },
   {
     "id": 2010,
@@ -183,9 +183,9 @@
     "status": "operational",
     "phone": "+91 452 258 0580",
     "beds": 250,
-    "availableBeds": 56,
+    "availableBeds": 59,
     "scrapedSource": "verified-registry",
-    "lastScrapedAt": "2026-09-29T08:54:25.796Z"
+    "lastScrapedAt": "2026-09-30T07:48:56.889Z"
   },
   {
     "id": 2011,
@@ -201,9 +201,9 @@
     "status": "operational",
     "phone": "+91 44 4200 2288",
     "beds": 600,
-    "availableBeds": 183,
+    "availableBeds": 164,
     "scrapedSource": "verified-registry",
-    "lastScrapedAt": "2026-09-29T08:54:25.796Z"
+    "lastScrapedAt": "2026-09-30T07:48:56.889Z"
   },
   {
     "id": 2012,
@@ -219,9 +219,9 @@
     "status": "operational",
     "phone": "+91 44 4289 2222",
     "beds": 180,
-    "availableBeds": 36,
+    "availableBeds": 40,
     "scrapedSource": "verified-registry",
-    "lastScrapedAt": "2026-09-29T08:54:25.796Z"
+    "lastScrapedAt": "2026-09-30T07:48:56.889Z"
   },
   {
     "id": 2013,
@@ -237,9 +237,9 @@
     "status": "operational",
     "phone": "+91 44 4592 8500",
     "beds": 800,
-    "availableBeds": 155,
+    "availableBeds": 113,
     "scrapedSource": "verified-registry",
-    "lastScrapedAt": "2026-09-29T08:54:25.796Z"
+    "lastScrapedAt": "2026-09-30T07:48:56.889Z"
   },
   {
     "id": 2014,
@@ -255,9 +255,9 @@
     "status": "operational",
     "phone": "+91 44 4000 6000",
     "beds": 300,
-    "availableBeds": 36,
+    "availableBeds": 101,
     "scrapedSource": "verified-registry",
-    "lastScrapedAt": "2026-09-29T08:54:25.796Z"
+    "lastScrapedAt": "2026-09-30T07:48:56.889Z"
   },
   {
     "id": 2015,
@@ -273,9 +273,9 @@
     "status": "operational",
     "phone": "+91 422 230 1393",
     "beds": 2200,
-    "availableBeds": 608,
+    "availableBeds": 355,
     "scrapedSource": "verified-registry",
-    "lastScrapedAt": "2026-09-29T08:54:25.796Z"
+    "lastScrapedAt": "2026-09-30T07:48:56.889Z"
   },
   {
     "id": 2016,
@@ -291,9 +291,9 @@
     "status": "operational",
     "phone": "+91 422 432 3800",
     "beds": 1500,
-    "availableBeds": 349,
+    "availableBeds": 347,
     "scrapedSource": "verified-registry",
-    "lastScrapedAt": "2026-09-29T08:54:25.796Z"
+    "lastScrapedAt": "2026-09-30T07:48:56.889Z"
   },
   {
     "id": 2017,
@@ -309,9 +309,9 @@
     "status": "operational",
     "phone": "+91 422 257 0170",
     "beds": 900,
-    "availableBeds": 97,
+    "availableBeds": 260,
     "scrapedSource": "verified-registry",
-    "lastScrapedAt": "2026-09-29T08:54:25.796Z"
+    "lastScrapedAt": "2026-09-30T07:48:56.889Z"
   },
   {
     "id": 2018,
@@ -327,9 +327,9 @@
     "status": "operational",
     "phone": "+91 422 248 5000",
     "beds": 500,
-    "availableBeds": 124,
+    "availableBeds": 59,
     "scrapedSource": "verified-registry",
-    "lastScrapedAt": "2026-09-29T08:54:25.796Z"
+    "lastScrapedAt": "2026-09-30T07:48:56.889Z"
   },
   {
     "id": 2019,
@@ -345,9 +345,9 @@
     "status": "operational",
     "phone": "+91 452 253 2535",
     "beds": 2800,
-    "availableBeds": 535,
+    "availableBeds": 665,
     "scrapedSource": "verified-registry",
-    "lastScrapedAt": "2026-09-29T08:54:25.796Z"
+    "lastScrapedAt": "2026-09-30T07:48:56.889Z"
   },
   {
     "id": 2020,
@@ -363,9 +363,9 @@
     "status": "operational",
     "phone": "+91 452 426 3000",
     "beds": 600,
-    "availableBeds": 204,
+    "availableBeds": 65,
     "scrapedSource": "verified-registry",
-    "lastScrapedAt": "2026-09-29T08:54:25.796Z"
+    "lastScrapedAt": "2026-09-30T07:48:56.889Z"
   },
   {
     "id": 2021,
@@ -381,9 +381,9 @@
     "status": "operational",
     "phone": "+91 431 278 1200",
     "beds": 1600,
-    "availableBeds": 441,
+    "availableBeds": 425,
     "scrapedSource": "verified-registry",
-    "lastScrapedAt": "2026-09-29T08:54:25.796Z"
+    "lastScrapedAt": "2026-09-30T07:48:56.889Z"
   },
   {
     "id": 2022,
@@ -399,9 +399,9 @@
     "status": "operational",
     "phone": "+91 431 407 7777",
     "beds": 350,
-    "availableBeds": 90,
+    "availableBeds": 118,
     "scrapedSource": "verified-registry",
-    "lastScrapedAt": "2026-09-29T08:54:25.796Z"
+    "lastScrapedAt": "2026-09-30T07:48:56.889Z"
   },
   {
     "id": 2023,
@@ -417,9 +417,9 @@
     "status": "operational",
     "phone": "+91 427 221 1213",
     "beds": 1400,
-    "availableBeds": 320,
+    "availableBeds": 407,
     "scrapedSource": "verified-registry",
-    "lastScrapedAt": "2026-09-29T08:54:25.796Z"
+    "lastScrapedAt": "2026-09-30T07:48:56.889Z"
   },
   {
     "id": 2024,
@@ -435,9 +435,9 @@
     "status": "operational",
     "phone": "+91 427 231 9090",
     "beds": 300,
-    "availableBeds": 96,
+    "availableBeds": 49,
     "scrapedSource": "verified-registry",
-    "lastScrapedAt": "2026-09-29T08:54:25.796Z"
+    "lastScrapedAt": "2026-09-30T07:48:56.889Z"
   },
   {
     "id": 2025,
@@ -453,9 +453,9 @@
     "status": "operational",
     "phone": "+91 416 228 1000",
     "beds": 2700,
-    "availableBeds": 634,
+    "availableBeds": 926,
     "scrapedSource": "verified-registry",
-    "lastScrapedAt": "2026-09-29T08:54:25.797Z"
+    "lastScrapedAt": "2026-09-30T07:48:56.889Z"
   },
   {
     "id": 2026,
@@ -471,9 +471,9 @@
     "status": "operational",
     "phone": "+91 462 257 2733",
     "beds": 1800,
-    "availableBeds": 493,
+    "availableBeds": 336,
     "scrapedSource": "verified-registry",
-    "lastScrapedAt": "2026-09-29T08:54:25.797Z"
+    "lastScrapedAt": "2026-09-30T07:48:56.889Z"
   },
   {
     "id": 2027,
@@ -489,9 +489,9 @@
     "status": "operational",
     "phone": "+91 4142 230234",
     "beds": 600,
-    "availableBeds": 75,
+    "availableBeds": 200,
     "scrapedSource": "verified-registry",
-    "lastScrapedAt": "2026-09-29T08:54:25.797Z"
+    "lastScrapedAt": "2026-09-30T07:48:56.889Z"
   },
   {
     "id": 2028,
@@ -507,9 +507,9 @@
     "status": "operational",
     "phone": "+91 4144 238321",
     "beds": 1200,
-    "availableBeds": 367,
+    "availableBeds": 185,
     "scrapedSource": "verified-registry",
-    "lastScrapedAt": "2026-09-29T08:54:25.797Z"
+    "lastScrapedAt": "2026-09-30T07:48:56.889Z"
   },
   {
     "id": 2029,
@@ -525,9 +525,9 @@
     "status": "operational",
     "phone": "+91 4146 232100",
     "beds": 800,
-    "availableBeds": 248,
+    "availableBeds": 119,
     "scrapedSource": "verified-registry",
-    "lastScrapedAt": "2026-09-29T08:54:25.797Z"
+    "lastScrapedAt": "2026-09-30T07:48:56.889Z"
   },
   {
     "id": 2030,
@@ -543,9 +543,9 @@
     "status": "operational",
     "phone": "+91 44 2742 6224",
     "beds": 1000,
-    "availableBeds": 266,
+    "availableBeds": 303,
     "scrapedSource": "verified-registry",
-    "lastScrapedAt": "2026-09-29T08:54:25.797Z"
+    "lastScrapedAt": "2026-09-30T07:48:56.889Z"
   },
   {
     "id": 2031,
@@ -561,9 +561,9 @@
     "status": "operational",
     "phone": "+91 44 2226 5122",
     "beds": 500,
-    "availableBeds": 146,
+    "availableBeds": 148,
     "scrapedSource": "verified-registry",
-    "lastScrapedAt": "2026-09-29T08:54:25.797Z"
+    "lastScrapedAt": "2026-09-30T07:48:56.889Z"
   },
   {
     "id": 2032,
@@ -579,9 +579,9 @@
     "status": "operational",
     "phone": "+91 424 222 5580",
     "beds": 800,
-    "availableBeds": 193,
+    "availableBeds": 253,
     "scrapedSource": "verified-registry",
-    "lastScrapedAt": "2026-09-29T08:54:25.797Z"
+    "lastScrapedAt": "2026-09-30T07:48:56.889Z"
   },
   {
     "id": 2033,
@@ -597,9 +597,9 @@
     "status": "operational",
     "phone": "+91 4546 252344",
     "beds": 500,
-    "availableBeds": 113,
+    "availableBeds": 88,
     "scrapedSource": "verified-registry",
-    "lastScrapedAt": "2026-09-29T08:54:25.797Z"
+    "lastScrapedAt": "2026-09-30T07:48:56.889Z"
   },
   {
     "id": 2034,
@@ -615,9 +615,9 @@
     "status": "operational",
     "phone": "+91 4651 260133",
     "beds": 600,
-    "availableBeds": 110,
+    "availableBeds": 194,
     "scrapedSource": "verified-registry",
-    "lastScrapedAt": "2026-09-29T08:54:25.797Z"
+    "lastScrapedAt": "2026-09-30T07:48:56.890Z"
   },
   {
     "id": 2035,
@@ -633,8 +633,8 @@
     "status": "operational",
     "phone": "+91 4175 233344",
     "beds": 600,
-    "availableBeds": 109,
+    "availableBeds": 114,
     "scrapedSource": "verified-registry",
-    "lastScrapedAt": "2026-09-29T08:54:25.797Z"
+    "lastScrapedAt": "2026-09-30T07:48:56.890Z"
   }
 ]
